@@ -1,4 +1,4 @@
-# Ammu 1.1 — Source upgrade notes
+# Ammu 1.4 — Offline Qwen release notes
 
 This source upgrade is not an official release; no signed APK or physical-device validation was produced.
 

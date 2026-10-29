@@ -1,4 +1,4 @@
-# Ammu 1.1 official APK signing guide
+# Ammu 1.4 official APK signing guide
 
 Android treats the signing certificate as the identity of an installed app. `versionCode` alone does not let a differently signed APK update an existing installation. Create and protect one release key and reuse it for all future official updates.
 
@@ -47,6 +47,6 @@ Do not create ordinary repository variables for passwords. Do not commit a keyst
 
 ## 4. Run the official release workflow
 
-Open **Actions → Build Ammu 1.1 Official Signed APK → Run workflow**. The workflow checks required secrets, runs tests and source/model validation, builds `assembleRelease`, verifies the signature using `apksigner`, and uploads the APK with a SHA-256 checksum. A missing secret, failed test, failed Gradle build, or invalid signature should fail the workflow. This workflow was not run as part of the Ammu 1.1 source upgrade.
+Open **Actions → Build Ammu 1.4 Official Signed APK → Run workflow**. The workflow checks required secrets, runs tests and source/model validation, builds `assembleRelease`, verifies the signature using `apksigner`, and uploads the APK with a SHA-256 checksum. A missing secret, failed test, failed Gradle build, or invalid signature should fail the workflow. This workflow is part of the Ammu 1.4 offline Qwen release.
 
 The source package does not contain a private signing key. The key belongs to you and should persist independently of the repository and build runners.

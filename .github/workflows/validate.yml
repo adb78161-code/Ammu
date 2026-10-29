@@ -1,4 +1,4 @@
-name: Validate Ammu 1.1 (CI debug APK only)
+name: Validate Ammu 1.4 (CI debug APK only)
 on:
   workflow_dispatch:
   push:
@@ -53,7 +53,7 @@ jobs:
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
         with:
-          name: ammu-1.1-ci-evaluation-reports-not-for-release
+          name: ammu-1.4-ci-evaluation-reports-not-for-release
           path: |
             evaluation/ci-independent-brain-report.json
             evaluation/ci-secondary-brain-report.json
@@ -72,6 +72,6 @@ jobs:
       - name: Upload CI/debug APK (not for official distribution)
         uses: actions/upload-artifact@v4
         with:
-          name: ammu-1.1-ci-debug-apk-not-for-release
+          name: ammu-1.4-ci-debug-apk-not-for-release
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

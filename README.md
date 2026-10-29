@@ -1,6 +1,6 @@
-# Ammu 1.1 — Conversational and offline source upgrade
+# Ammu 1.4 — Conversational and offline source upgrade
 
-This checkout contains the Ammu 1.1 source upgrade (`versionCode 23`). This task does not create or publish an official release: **no signed APK is built here**, and the source has **not been tested on a physical device**. Do not distribute a CI/debug APK as an official app.
+This checkout contains the Ammu 1.4 offline Qwen release (`versionCode 24`). This task does not create or publish an official release: **no signed APK is built here**, and the source has **not been tested on a physical device**. Do not distribute a CI/debug APK as an official app.
 
 ## App icon and branding
 
@@ -40,15 +40,15 @@ python3 tools/evaluate_brain.py --benchmark app/src/main/assets/brain-benchmark-
 gradle --no-daemon assembleDebug
 ```
 
-The `Validate Ammu 1.1 (CI debug APK only)` workflow runs those checks and can build a debug APK. Its artifact is explicitly marked **not for official distribution**.
+The `Validate Ammu 1.4 (CI debug APK only)` workflow runs those checks and can build a debug APK. Its artifact is explicitly marked **not for official distribution**.
 
 ## Build the signed official APK
 
 1. Read `RELEASE_SIGNING_GUIDE.md` before setting up signing.
 2. Create a signing keystore you control and store backups offline.
 3. Add the four signing values as **GitHub Actions repository secrets**. Never put the keystore, password, or encoded keystore text into the repository/source ZIP.
-4. In GitHub, open **Actions → Build Ammu 1.1 Official Signed APK → Run workflow**.
-5. The workflow runs validation, builds the release variant, verifies the APK signature with `apksigner`, and uploads `ammu-1.1-official-signed-apk` plus a SHA-256 checksum.
+4. In GitHub, open **Actions → Build Ammu 1.4 Official Signed APK → Run workflow**.
+5. The workflow runs validation, builds the release variant, verifies the APK signature with `apksigner`, and uploads `ammu-1.4-official-signed-apk` plus a SHA-256 checksum.
 6. If a secret is missing or signature verification fails, no official artifact should be distributed.
 
 The four required repository secrets are:
@@ -62,7 +62,7 @@ Keep the same signing key for every future official update. Losing it can preven
 
 ## Updating from an earlier testing APK
 
-The Android application ID stays `com.ammu.assistant`; this source is version `1.1` with Android `versionCode 23`. **Do not assume a locally installed debug APK can be upgraded in place**: Android requires the signing certificate to match too. Before replacing any testing build, export Ammu's complete backup and check that the file exists. If Android reports a signature mismatch, uninstalling the old build may be necessary; restore your backup after installing the signed APK.
+The Android application ID stays `com.ammu.assistant`; this source is version `1.4` with Android `versionCode 24`. **Do not assume a locally installed debug APK can be upgraded in place**: Android requires the signing certificate to match too. Before replacing any testing build, export Ammu's complete backup and check that the file exists. If Android reports a signature mismatch, uninstalling the old build may be necessary; restore your backup after installing the signed APK.
 
 ## Voice cloning
 

@@ -1,4 +1,4 @@
-name: Build Ammu 1.1 Official Signed APK
+name: Build Ammu 1.4 Official Signed APK
 on:
   workflow_dispatch:
 permissions:
@@ -95,7 +95,7 @@ jobs:
       - name: Upload official signed APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: ammu-1.1-official-signed-apk
+          name: ammu-1.4-official-signed-apk
           path: |
             app/build/outputs/apk/release/app-release.apk
             app-release.apk.sha256

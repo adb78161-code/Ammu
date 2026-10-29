@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Source-level Ammu 1.1 guardrails; does not replace an Android SDK build or device test."""
+"""Source-level Ammu 1.4 guardrails; does not replace an Android SDK build or device test."""
 from pathlib import Path
 import json
 import re
@@ -17,7 +17,7 @@ INTENTS = json.loads((ROOT / "app/src/main/assets/intents.json").read_text(encod
 TRAINER = (ROOT / "tools/train_brain.py").read_text(encoding="utf-8")
 
 checks = {
-    "Ammu 1.1 semantic version and monotonic Android build code configured": "versionName '1.1'" in BUILD and "versionCode 23" in BUILD,
+    "Ammu 1.4 semantic version and monotonic Android build code configured": "versionName '1.4'" in BUILD and "versionCode 24" in BUILD,
     "reviewed correction command records the actual phone mistake and prior prediction": "correct last intent to " in JAVA and "last_learning_phrase" in JAVA and 'put("source","phone_mistake")' in JAVA and 'put("predicted_label",predicted)' in JAVA,
     "on-device correction picker captures real user-reported mistakes": "openPhoneCorrectionDialog()" in JAVA and "report last mistake" in JAVA and "saveLastPhoneCorrection(label)" in JAVA,
     "last model prediction is stored locally for correction context": 'putString("last_learning_predicted",intent)' in JAVA,
@@ -62,14 +62,14 @@ checks = {
     "memory deletion requires confirmation for bulk clearing": "confirmClearMemory()" in JAVA and 'setPositiveButton("Forget all facts"' in JAVA,
     "app launcher remains allow-listed and Android package queries exist": "String[] packages={" in JAVA and "com.google.android.calculator" in MANIFEST,
     "CI runs data/model validators and a Gradle APK build": "tools/validate_brain.py" in WORKFLOW and "tools/validate_release_source.py" in WORKFLOW and "tools/train_brain.py" in WORKFLOW and "assembleDebug" in WORKFLOW,
-    "CI artifact is explicitly marked debug and not for release": "ammu-1.1-ci-debug-apk-not-for-release" in WORKFLOW and "not the official signed release" in WORKFLOW,
-    "official app label and welcome message no longer expose testing-build identity": 'android:label="Ammu 1.1"' in MANIFEST and "I'm Ammu 1.1, your personal assistant" in JAVA and "Testing Build 7" not in JAVA,
+    "CI artifact is explicitly marked debug and not for release": "ammu-1.4-ci-debug-apk-not-for-release" in WORKFLOW and "not the official signed release" in WORKFLOW,
+    "official app label and welcome message no longer expose testing-build identity": 'android:label="Ammu 1.4"' in MANIFEST and "I'm Ammu 1.4, your private offline assistant" in JAVA and "Testing Build 7" not in JAVA,
     "privacy and offline operation details are available in app tools and commands": "showPrivacyAndOfflineInfo()" in JAVA and "Privacy & offline details" in JAVA and "privacy and offline info" in JAVA and "on-device SpeechRecognizer only" in JAVA,
     "privacy detail accurately explains offline speech and TTS behavior": "never launches Google's speech-recognition activity" in JAVA and "typed chat remains available" in JAVA.lower() and "Speech output may depend" in JAVA,
     "official adaptive launcher icon resources are configured": 'android:icon="@mipmap/ic_ammu"' in MANIFEST and (ROOT / "app/src/main/res/mipmap-anydpi-v26/ic_ammu.xml").exists() and (ROOT / "app/src/main/res/drawable/ic_ammu_foreground.xml").exists(),
     "Gradle official release uses environment-supplied signing credentials": all(x in BUILD for x in ["AMMU_KEYSTORE_PATH", "AMMU_KEYSTORE_PASSWORD", "AMMU_KEY_ALIAS", "AMMU_KEY_PASSWORD", "signingConfig signingConfigs.release"]),
-    "Gradle fails closed on an unsigned official release task": "requestedRelease" in BUILD and "Official Ammu 1.1 release requires" in BUILD and "!signingReady" in BUILD,
-    "official release workflow requires secrets and verifies APK signature": all(x in RELEASE_WORKFLOW for x in ["AMMU_KEYSTORE_BASE64", "AMMU_KEYSTORE_PASSWORD", "AMMU_KEY_ALIAS", "AMMU_KEY_PASSWORD", "assembleRelease", "APKSIGNER", "verify --verbose --print-certs", "ammu-1.1-official-signed-apk"]),
+    "Gradle fails closed on an unsigned official release task": "requestedRelease" in BUILD and "Official Ammu 1.4 release requires" in BUILD and "!signingReady" in BUILD,
+    "official release workflow requires secrets and verifies APK signature": all(x in RELEASE_WORKFLOW for x in ["AMMU_KEYSTORE_BASE64", "AMMU_KEYSTORE_PASSWORD", "AMMU_KEY_ALIAS", "AMMU_KEY_PASSWORD", "assembleRelease", "APKSIGNER", "verify --verbose --print-certs", "ammu-1.4-official-signed-apk"]),
     "official release workflow is manual to avoid accidental publishing": "workflow_dispatch" in RELEASE_WORKFLOW and "push:" not in RELEASE_WORKFLOW,
     "release signing guide warns never to commit or lose the key": (ROOT / "RELEASE_SIGNING_GUIDE.md").exists() and "Do not commit a keystore" in (ROOT / "RELEASE_SIGNING_GUIDE.md").read_text(encoding="utf-8") and "losing the release key can prevent" in (ROOT / "RELEASE_SIGNING_GUIDE.md").read_text(encoding="utf-8").lower(),
     "official release source is distinguished from an APK already published or device-tested": "no signed apk is built here" in README.lower() and "not been tested on a physical device" in README.lower(),
@@ -89,7 +89,7 @@ checks = {
     "learning examples do not silently alter production weights": "live brain weights have not changed" in JAVA and "brain-candidate.json" in TRAINER,
     "labeled examples survive complete backup and restore": 'o.put("brain_examples"' in JAVA and 'putString("brain_examples"' in JAVA and 'version",5' in JAVA,
     "local brain benchmark tests fixed phrases without mutating data": "runLocalBrainBenchmark()" in JAVA and "run brain benchmark" in JAVA and "does not change the model" in JAVA,
-    "source upgrade wording is consistent across app and metadata": "Ammu 1.1" in MANIFEST and "source upgrade" in README.lower() and "versionName '1.1'" in BUILD,
+    "source upgrade wording is consistent across app and metadata": "Ammu 1.4" in MANIFEST and "source upgrade" in README.lower() and "versionName '1.4'" in BUILD,
     "learning examples can be imported through Android document picker": "REQ_IMPORT_BRAIN_EXAMPLES" in JAVA and "ACTION_OPEN_DOCUMENT" in JAVA and "importBrainExamples(Uri uri)" in JAVA,
     "imported learning examples are format-checked, bounded, deduplicated and label-allowlisted": "maxBytes=1024*1024" in JAVA and "Unsupported format" in JAVA and "merged.length()>=500" in JAVA and "imported_reviewed" in JAVA,
     "invalid import leaves existing learning queue unchanged": "Your existing learning queue was not changed" in JAVA and 'brainExamples=merged;save("brain_examples",brainExamples)' in JAVA,
@@ -116,4 +116,4 @@ for label, ok in checks.items():
     if not ok: failed.append(label)
 if failed:
     raise SystemExit("Failed checks: " + "; ".join(failed))
-print(f"PASS: {len(checks)} Ammu 1.1 source checks")
+print(f"PASS: {len(checks)} Ammu 1.4 source checks")
