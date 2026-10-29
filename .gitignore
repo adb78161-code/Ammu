@@ -1,0 +1,12 @@
+# Android/Gradle outputs and local machine state
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+*.jks
+*.keystore
+*keystore*.txt
+*base64*.txt
+.env

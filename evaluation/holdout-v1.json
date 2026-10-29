@@ -1,0 +1,526 @@
+{
+  "format": "ammu-development-eval-v1",
+  "description": "Fixed non-overlapping development benchmark. Exact phrases are excluded from all training inputs. This set has been inspected during development and used to guide category-level data improvements, so it is not an untouched blind test or a general-intelligence evaluation.",
+  "examples": [
+    {
+      "text": "how's everything, Ammu",
+      "label": "greeting"
+    },
+    {
+      "text": "good morning assistant",
+      "label": "greeting"
+    },
+    {
+      "text": "अम्मू नमस्ते",
+      "label": "greeting"
+    },
+    {
+      "text": "ಅಮ್ಮು, ಹೇಗಿದ್ದೀಯ?",
+      "label": "greeting"
+    },
+    {
+      "text": "are you listening to me",
+      "label": "greeting"
+    },
+    {
+      "text": "give me a quick command reference",
+      "label": "help"
+    },
+    {
+      "text": "what features can I use without internet",
+      "label": "help"
+    },
+    {
+      "text": "show the instructions for using you",
+      "label": "help"
+    },
+    {
+      "text": "कौन से आदेश मैं दे सकता हूँ",
+      "label": "help"
+    },
+    {
+      "text": "ನಿನ್ನ ಆಯ್ಕೆಗಳು ಯಾವುವು",
+      "label": "help"
+    },
+    {
+      "text": "read out the time right now",
+      "label": "time"
+    },
+    {
+      "text": "can we check the clock",
+      "label": "time"
+    },
+    {
+      "text": "घड़ी का समय बताओ",
+      "label": "time"
+    },
+    {
+      "text": "ಈ ಕ್ಷಣ ಸಮಯ ಎಷ್ಟು",
+      "label": "time"
+    },
+    {
+      "text": "what time does my phone show",
+      "label": "time"
+    },
+    {
+      "text": "tell me today's calendar date",
+      "label": "date"
+    },
+    {
+      "text": "what date are we on today",
+      "label": "date"
+    },
+    {
+      "text": "आज कौन सा वार है",
+      "label": "date"
+    },
+    {
+      "text": "ಇವತ್ತಿನ ದಿನಾಂಕ ಹೇಳು",
+      "label": "date"
+    },
+    {
+      "text": "show today's day and date",
+      "label": "date"
+    },
+    {
+      "text": "put a note saying submit my lab record",
+      "label": "note_add"
+    },
+    {
+      "text": "keep a written note: call the bank",
+      "label": "note_add"
+    },
+    {
+      "text": "मेरे लिए नोट लिखो: कल परीक्षा है",
+      "label": "note_add"
+    },
+    {
+      "text": "ನೋಟಿನಲ್ಲಿ ಬರೆಯು: ಇಂದು ಓದು",
+      "label": "note_add"
+    },
+    {
+      "text": "capture this as a note: project deadline",
+      "label": "note_add"
+    },
+    {
+      "text": "read back all saved notes",
+      "label": "note_list"
+    },
+    {
+      "text": "show me the notes I have stored",
+      "label": "note_list"
+    },
+    {
+      "text": "मेरे लिखे नोट्स खोलो",
+      "label": "note_list"
+    },
+    {
+      "text": "ನಾನು ಉಳಿಸಿದ ಟಿಪ್ಪಣಿಗಳನ್ನು ಓದು",
+      "label": "note_list"
+    },
+    {
+      "text": "list the notes on this device",
+      "label": "note_list"
+    },
+    {
+      "text": "look through notes for physics",
+      "label": "note_search"
+    },
+    {
+      "text": "which saved note mentions my exam",
+      "label": "note_search"
+    },
+    {
+      "text": "मेरे नोट्स में कॉलेज खोजो",
+      "label": "note_search"
+    },
+    {
+      "text": "ಟಿಪ್ಪಣಿಗಳಲ್ಲಿ ಪರೀಕ್ಷೆ ಹುಡುಕು",
+      "label": "note_search"
+    },
+    {
+      "text": "find the item I noted about groceries",
+      "label": "note_search"
+    },
+    {
+      "text": "empty my entire notes collection",
+      "label": "note_delete"
+    },
+    {
+      "text": "wipe the full note collection",
+      "label": "note_delete"
+    },
+    {
+      "text": "erase every note, not just one",
+      "label": "note_delete"
+    },
+    {
+      "text": "सभी नोट्स हटा दो",
+      "label": "note_delete"
+    },
+    {
+      "text": "ನನ್ನ ಎಲ್ಲ ಟಿಪ್ಪಣಿಗಳನ್ನು ತೆಗೆದುಹಾಕು",
+      "label": "note_delete"
+    },
+    {
+      "text": "bring up system configuration",
+      "label": "open_settings"
+    },
+    {
+      "text": "navigate to my phone settings",
+      "label": "open_settings"
+    },
+    {
+      "text": "फोन की सेटिंग्स पर जाओ",
+      "label": "open_settings"
+    },
+    {
+      "text": "ಮೊಬೈಲ್ ಸೆಟ್ಟಿಂಗ್ಸ್ ತೋರಿಸು",
+      "label": "open_settings"
+    },
+    {
+      "text": "open the device configuration page",
+      "label": "open_settings"
+    },
+    {
+      "text": "what percentage is my charge at",
+      "label": "battery"
+    },
+    {
+      "text": "tell me if my phone needs charging",
+      "label": "battery"
+    },
+    {
+      "text": "फोन में कितनी बैटरी बाकी है",
+      "label": "battery"
+    },
+    {
+      "text": "ಚಾರ್ಜ್ ಎಷ್ಟು ಉಳಿದಿದೆ",
+      "label": "battery"
+    },
+    {
+      "text": "check remaining battery power",
+      "label": "battery"
+    },
+    {
+      "text": "what is this handset's model and brand",
+      "label": "device_info"
+    },
+    {
+      "text": "show Android phone specifications",
+      "label": "device_info"
+    },
+    {
+      "text": "मेरे डिवाइस का मॉडल बताओ",
+      "label": "device_info"
+    },
+    {
+      "text": "ಈ ಮೊಬೈಲ್ ಬಗ್ಗೆ ಮಾಹಿತಿ ಕೊಡು",
+      "label": "device_info"
+    },
+    {
+      "text": "which Android release is installed here",
+      "label": "device_info"
+    },
+    {
+      "text": "work out 17 minus 8",
+      "label": "calculate"
+    },
+    {
+      "text": "what do you get from 7 multiplied by 9",
+      "label": "calculate"
+    },
+    {
+      "text": "गणना करो 14 जोड़ 19",
+      "label": "calculate"
+    },
+    {
+      "text": "ಈ ಲೆಕ್ಕ ಹಾಕು: 8 + 6",
+      "label": "calculate"
+    },
+    {
+      "text": "evaluate 3 raised to 4",
+      "label": "calculate"
+    },
+    {
+      "text": "i'll chat with you later",
+      "label": "goodbye"
+    },
+    {
+      "text": "that's enough for now, bye",
+      "label": "goodbye"
+    },
+    {
+      "text": "अब चलता हूँ अम्मू",
+      "label": "goodbye"
+    },
+    {
+      "text": "ನಂತರ ಮಾತನಾಡೋಣ ಅಮ್ಮು",
+      "label": "goodbye"
+    },
+    {
+      "text": "end our chat for now",
+      "label": "goodbye"
+    },
+    {
+      "text": "please stop this request",
+      "label": "cancel"
+    },
+    {
+      "text": "don't continue with that",
+      "label": "cancel"
+    },
+    {
+      "text": "रहने दो, इसे बंद करो",
+      "label": "cancel"
+    },
+    {
+      "text": "ಅದನ್ನು ನಿಲ್ಲಿಸು",
+      "label": "cancel"
+    },
+    {
+      "text": "no, abort the operation",
+      "label": "cancel"
+    },
+    {
+      "text": "write a poem about the moon",
+      "label": "unknown"
+    },
+    {
+      "text": "give me tomorrow's weather forecast",
+      "label": "unknown"
+    },
+    {
+      "text": "search the internet for photography tutorials",
+      "label": "unknown"
+    },
+    {
+      "text": "मेरे लिए वेबसाइट बना दो",
+      "label": "unknown"
+    },
+    {
+      "text": "ಈ ದಿನದ ಸುದ್ದಿ ಹೇಳು",
+      "label": "unknown"
+    },
+    {
+      "text": "put revise calculus on my to-do list",
+      "label": "task_add"
+    },
+    {
+      "text": "make an item to pack my charger",
+      "label": "task_add"
+    },
+    {
+      "text": "मेरे काम में कॉलेज जाना जोड़ो",
+      "label": "task_add"
+    },
+    {
+      "text": "ನಾಳೆ ಬಿಲ್ ಕಟ್ಟಲು ಕೆಲಸ ಸೇರಿಸು",
+      "label": "task_add"
+    },
+    {
+      "text": "add a new task named finish assignment",
+      "label": "task_add"
+    },
+    {
+      "text": "what items are left on my checklist",
+      "label": "task_list"
+    },
+    {
+      "text": "tell me my unfinished to-dos",
+      "label": "task_list"
+    },
+    {
+      "text": "मेरे बाकी रिमाइंडर दिखाओ",
+      "label": "task_list"
+    },
+    {
+      "text": "ನನ್ನ ಅಪೂರ್ಣ ಕಾರ್ಯಗಳನ್ನು ಓದು",
+      "label": "task_list"
+    },
+    {
+      "text": "open the pending task list",
+      "label": "task_list"
+    },
+    {
+      "text": "check off task number four",
+      "label": "task_done"
+    },
+    {
+      "text": "set the third task to completed",
+      "label": "task_done"
+    },
+    {
+      "text": "काम नंबर एक पूरा हुआ चिह्नित करो",
+      "label": "task_done"
+    },
+    {
+      "text": "ನಾಲ್ಕನೇ ಕೆಲಸ ಪೂರ್ಣ ಎಂದು ಗುರುತುಮಾಡು",
+      "label": "task_done"
+    },
+    {
+      "text": "finish the item numbered 3",
+      "label": "task_done"
+    },
+    {
+      "text": "keep in mind that I prefer Kannada replies",
+      "label": "memory_save"
+    },
+    {
+      "text": "store this fact: my exam is next month",
+      "label": "memory_save"
+    },
+    {
+      "text": "याद रखना कि मुझे चित्र बनाना पसंद है",
+      "label": "memory_save"
+    },
+    {
+      "text": "ನೆನಪಿಡು ನನಗೆ ನೀಲಿ ಬಣ್ಣ ಇಷ್ಟ",
+      "label": "memory_save"
+    },
+    {
+      "text": "save my preference for dark backgrounds",
+      "label": "memory_save"
+    },
+    {
+      "text": "tell me which preferences I asked you to keep",
+      "label": "memory_recall"
+    },
+    {
+      "text": "recall the facts stored about my interests",
+      "label": "memory_recall"
+    },
+    {
+      "text": "मेरी सेव की हुई पसंद बताओ",
+      "label": "memory_recall"
+    },
+    {
+      "text": "ನನ್ನ ಬಗ್ಗೆ ಉಳಿಸಿದ ಮಾಹಿತಿಯನ್ನು ಹೇಳು",
+      "label": "memory_recall"
+    },
+    {
+      "text": "what personal facts are in your memory",
+      "label": "memory_recall"
+    },
+    {
+      "text": "erase the memory entry numbered four",
+      "label": "memory_forget"
+    },
+    {
+      "text": "remove that fact from what you remember",
+      "label": "memory_forget"
+    },
+    {
+      "text": "मेरी दूसरी याद हटाओ",
+      "label": "memory_forget"
+    },
+    {
+      "text": "ಉಳಿಸಿದ ಮೂರನೇ ನೆನಪನ್ನು ಅಳಿಸು",
+      "label": "memory_forget"
+    },
+    {
+      "text": "forget my saved preference for colors",
+      "label": "memory_forget"
+    },
+    {
+      "text": "add to diary: today was busy",
+      "label": "journal_add"
+    },
+    {
+      "text": "save my thoughts about the exam in my journal",
+      "label": "journal_add"
+    },
+    {
+      "text": "मेरी डायरी में लिखो कि आज पढ़ाई की",
+      "label": "journal_add"
+    },
+    {
+      "text": "ದಿನಚರಿಯಲ್ಲಿ ಇಂದು ಚೆನ್ನಾಗಿತ್ತು ಎಂದು ಬರೆಯು",
+      "label": "journal_add"
+    },
+    {
+      "text": "record this as today's journal entry",
+      "label": "journal_add"
+    },
+    {
+      "text": "read the latest entries in my diary",
+      "label": "journal_list"
+    },
+    {
+      "text": "show the things I wrote on past days",
+      "label": "journal_list"
+    },
+    {
+      "text": "मेरी जर्नल एंट्रीज पढ़ो",
+      "label": "journal_list"
+    },
+    {
+      "text": "ಹಿಂದಿನ ದಿನಚರಿ ಬರಹಗಳನ್ನು ತೋರಿಸು",
+      "label": "journal_list"
+    },
+    {
+      "text": "open my diary history",
+      "label": "journal_list"
+    },
+    {
+      "text": "save a copy of all Ammu information",
+      "label": "backup"
+    },
+    {
+      "text": "make an archive of my saved data",
+      "label": "backup"
+    },
+    {
+      "text": "मेरी जानकारी की कॉपी सुरक्षित करो",
+      "label": "backup"
+    },
+    {
+      "text": "ನನ್ನ ಅಮ್ಮು ಡೇಟಾವನ್ನು ಉಳಿಸಿ",
+      "label": "backup"
+    },
+    {
+      "text": "create a full backup file",
+      "label": "backup"
+    },
+    {
+      "text": "find whether I have a task about assignment",
+      "label": "task_search"
+    },
+    {
+      "text": "search the checklist for phone recharge",
+      "label": "task_search"
+    },
+    {
+      "text": "मेरे कामों में कॉलेज ढूँढो",
+      "label": "task_search"
+    },
+    {
+      "text": "ಪಟ್ಟಿಯಲ್ಲಿ ಓದುವ ಕೆಲಸ ಹುಡುಕು",
+      "label": "task_search"
+    },
+    {
+      "text": "look up my task about buying books",
+      "label": "task_search"
+    },
+    {
+      "text": "remove just note 4",
+      "label": "note_delete_one"
+    },
+    {
+      "text": "erase my second saved note only",
+      "label": "note_delete_one"
+    },
+    {
+      "text": "केवल तीसरा नोट हटाओ",
+      "label": "note_delete_one"
+    },
+    {
+      "text": "ನಾಲ್ಕನೇ ಟಿಪ್ಪಣಿಯನ್ನು ಮಾತ್ರ ಅಳಿಸು",
+      "label": "note_delete_one"
+    },
+    {
+      "text": "delete one particular note, number 5",
+      "label": "note_delete_one"
+    }
+  ]
+}

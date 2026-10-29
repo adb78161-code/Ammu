@@ -1,0 +1,320 @@
+{
+  "benchmark": "ammu-development-eval-v2",
+  "benchmark_path": "app/src/main/assets/brain-benchmark-v2.json",
+  "model": "app/src/main/assets/brain.json",
+  "metrics": {
+    "accuracy": 0.8076923076923077,
+    "macro_precision": 0.9365384615384615,
+    "macro_recall": 0.8076923076923077,
+    "macro_f1": 0.8354395604395605,
+    "mean_top_confidence": 0.8390304400555445,
+    "total": 104,
+    "correct": 84,
+    "per_label": {
+      "backup": {
+        "correct": 4,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "battery": {
+        "correct": 4,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "calculate": {
+        "correct": 2,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666
+      },
+      "cancel": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "date": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "device_info": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "goodbye": {
+        "correct": 4,
+        "support": 4,
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.888888888888889
+      },
+      "greeting": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "help": {
+        "correct": 1,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.25,
+        "f1": 0.4
+      },
+      "journal_add": {
+        "correct": 4,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "journal_list": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "memory_forget": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "memory_recall": {
+        "correct": 4,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "memory_save": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "note_add": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "note_delete": {
+        "correct": 2,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666
+      },
+      "note_delete_one": {
+        "correct": 2,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.5,
+        "f1": 0.6666666666666666
+      },
+      "note_list": {
+        "correct": 4,
+        "support": 4,
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.888888888888889
+      },
+      "note_search": {
+        "correct": 4,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "open_settings": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "task_add": {
+        "correct": 3,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 0.75,
+        "f1": 0.8571428571428571
+      },
+      "task_done": {
+        "correct": 4,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "task_list": {
+        "correct": 3,
+        "support": 4,
+        "precision": 0.75,
+        "recall": 0.75,
+        "f1": 0.75
+      },
+      "task_search": {
+        "correct": 4,
+        "support": 4,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "time": {
+        "correct": 4,
+        "support": 4,
+        "precision": 0.8,
+        "recall": 1.0,
+        "f1": 0.888888888888889
+      },
+      "unknown": {
+        "correct": 4,
+        "support": 4,
+        "precision": 0.2,
+        "recall": 1.0,
+        "f1": 0.33333333333333337
+      }
+    },
+    "errors": [
+      {
+        "text": "hello from my phone",
+        "expected": "greeting",
+        "predicted": "unknown",
+        "confidence": 0.4268
+      },
+      {
+        "text": "मुझे कौन-कौन से काम में मदद मिलेगी",
+        "expected": "help",
+        "predicted": "unknown",
+        "confidence": 0.1975
+      },
+      {
+        "text": "ನಿನ್ನಿಂದ ಯಾವ ಕೆಲಸಗಳನ್ನು ಮಾಡಿಸಬಹುದು?",
+        "expected": "help",
+        "predicted": "task_list",
+        "confidence": 0.8746
+      },
+      {
+        "text": "give me examples of things I can ask",
+        "expected": "help",
+        "predicted": "unknown",
+        "confidence": 0.4446
+      },
+      {
+        "text": "ಇಂದು ಯಾವ ತಾರೀಖು",
+        "expected": "date",
+        "predicted": "unknown",
+        "confidence": 0.3873
+      },
+      {
+        "text": "jot this down for later: pay electricity bill",
+        "expected": "note_add",
+        "predicted": "goodbye",
+        "confidence": 0.5894
+      },
+      {
+        "text": "ಎಲ್ಲಾ ಉಳಿಸಿದ ಟಿಪ್ಪಣಿಗಳನ್ನು ಅಳಿಸಿ",
+        "expected": "note_delete",
+        "predicted": "note_list",
+        "confidence": 0.9823
+      },
+      {
+        "text": "wipe my whole notes collection",
+        "expected": "note_delete",
+        "predicted": "unknown",
+        "confidence": 0.3192
+      },
+      {
+        "text": "ನನ್ನ ಸಿಸ್ಟಮ್ ಆಯ್ಕೆಗಳನ್ನು ತೆರೆಯಿರಿ",
+        "expected": "open_settings",
+        "predicted": "unknown",
+        "confidence": 0.5479
+      },
+      {
+        "text": "ಈ ಸಾಧನದ ವಿವರಗಳನ್ನು ಹೇಳಿ",
+        "expected": "device_info",
+        "predicted": "unknown",
+        "confidence": 0.1451
+      },
+      {
+        "text": "पच्चीस में से सात घटाओ",
+        "expected": "calculate",
+        "predicted": "unknown",
+        "confidence": 0.1854
+      },
+      {
+        "text": "೯ಕ್ಕೆ ೮ ಗುಣಿಸಿದರೆ ಎಷ್ಟು",
+        "expected": "calculate",
+        "predicted": "time",
+        "confidence": 0.6161
+      },
+      {
+        "text": "रहने दो, इसे छोड़ो",
+        "expected": "cancel",
+        "predicted": "unknown",
+        "confidence": 0.5394
+      },
+      {
+        "text": "put 'revise chapter three' on my to-do list",
+        "expected": "task_add",
+        "predicted": "unknown",
+        "confidence": 0.3927
+      },
+      {
+        "text": "show the things I haven't finished yet",
+        "expected": "task_list",
+        "predicted": "unknown",
+        "confidence": 0.4553
+      },
+      {
+        "text": "keep this in mind: my lab is on Thursday",
+        "expected": "memory_save",
+        "predicted": "unknown",
+        "confidence": 0.4851
+      },
+      {
+        "text": "मेरी यादों में से दूसरी बात हटा दो",
+        "expected": "memory_forget",
+        "predicted": "unknown",
+        "confidence": 0.4471
+      },
+      {
+        "text": "let me review my journal notes",
+        "expected": "journal_list",
+        "predicted": "unknown",
+        "confidence": 0.5241
+      },
+      {
+        "text": "नोट नंबर चार को हटा दो",
+        "expected": "note_delete_one",
+        "predicted": "unknown",
+        "confidence": 0.2362
+      },
+      {
+        "text": "ಎರಡನೇ ಟಿಪ್ಪಣಿಯನ್ನು ಅಳಿಸಿ",
+        "expected": "note_delete_one",
+        "predicted": "unknown",
+        "confidence": 0.5035
+      }
+    ]
+  }
+}

@@ -1,0 +1,50 @@
+Ammu 1.0 — Official version source validation report
+====================================================
+
+Release identity
+----------------
+Product versionName: 1.0
+Android versionCode: 22
+Application ID: com.ammu.assistant
+App label: Ammu 1.0
+Release status: Official-version source package; no signed APK is included.
+
+Implemented for the official version
+------------------------------------
+- Removed the Testing Build 7 label from the app name and welcome message.
+- Added the Ammu adaptive launcher icon.
+- Added in-app Privacy & offline operation information, available from TOOLS and the command `privacy and offline info`.
+- The privacy information explains local app storage, sensitive backups, no app INTERNET permission/cloud AI calls, and the possibility that the Android speech recognizer or TTS engine may use a network depending on the user's selected provider.
+- Added repository hygiene rules to exclude generated build folders, local machine settings, keystores and secret-text files.
+- Added release signing configuration sourced only from environment variables.
+- Added a dedicated official release workflow requiring four GitHub Actions secrets, building `assembleRelease`, verifying the APK with `apksigner`, and uploading a checksum.
+- Kept a separate CI/debug APK workflow whose artifact is clearly not for official distribution.
+- Preserved the custom-from-scratch neural intent classifier, protected evaluation sets, user-reviewed correction collection, local memory and action confirmation safeguards.
+
+Checks completed in this workspace
+----------------------------------
+- Python unit tests: 16 passed.
+- Java helper/logic tests: 32 passed.
+- Bundled brain shape and smoke tests: 25/25 passed.
+- Release source guardrails: 85/85 passed.
+- Fixed development benchmark v1: 102/130 = 78.46% (bundled model unchanged).
+- Secondary benchmark v2: 84/104 = 80.77% (bundled model unchanged).
+- The from-scratch training pipeline was run for 200 epochs on 613 labeled examples; its internal held-out accuracy was 66.7%. No candidate was promoted and no real phone-correction examples were available.
+- Both GitHub Actions workflow files parsed as YAML.
+- Android manifest, bundled JSON model/dataset, and icon XML resources parse successfully.
+- ZIP integrity and SHA-256 checksum are checked after packaging.
+
+What is not verified
+-------------------
+- No Android SDK/Gradle build was run in this workspace because Gradle and Android SDK environment variables are unavailable here.
+- No signed official APK was built, as no owner's private release key was supplied (and none is included in this source archive).
+- The official GitHub Actions workflow requires these repository secrets: AMMU_KEYSTORE_BASE64, AMMU_KEYSTORE_PASSWORD, AMMU_KEY_ALIAS, and AMMU_KEY_PASSWORD.
+- No physical-device install, update, backup/restore, mic, TTS, file-picker or app-launch test was performed on the Vivo T2X.
+- A CI/debug APK is not the official distribution artifact. Do not publish it as official.
+
+Important operational caveats
+-----------------------------
+- Keep the same release signing key forever for later updates, and maintain secure offline backups. Android may reject an update if its signer differs.
+- Export Ammu's full backup before uninstalling a testing build or changing signing keys. Android app-private storage is erased on uninstall.
+- Ammu itself has no INTERNET permission and no cloud AI endpoints. The Android speech recognizer and TTS provider are separate system components and may have different network behavior.
+- The neural model remains a small custom intent classifier, not a general-purpose LLM. Its benchmark percentages do not measure general intelligence.

@@ -1,0 +1,368 @@
+{
+  "benchmark": "ammu-development-eval-v1",
+  "benchmark_path": "/mnt/data/ammu-build7-work/ammu-1.0/app/src/main/assets/brain-benchmark-v1.json",
+  "model": "/mnt/data/ammu-build7-work/ammu-1.0/app/src/main/assets/brain.json",
+  "metrics": {
+    "accuracy": 0.7846153846153846,
+    "macro_precision": 0.95171629445823,
+    "macro_recall": 0.7846153846153846,
+    "macro_f1": 0.8287684537684537,
+    "mean_top_confidence": 0.7803156397294869,
+    "total": 130,
+    "correct": 102,
+    "per_label": {
+      "backup": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "battery": {
+        "correct": 5,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "calculate": {
+        "correct": 3,
+        "support": 5,
+        "precision": 0.75,
+        "recall": 0.6,
+        "f1": 0.6666666666666665
+      },
+      "cancel": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "date": {
+        "correct": 5,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "device_info": {
+        "correct": 3,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "goodbye": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "greeting": {
+        "correct": 5,
+        "support": 5,
+        "precision": 0.8333333333333334,
+        "recall": 1.0,
+        "f1": 0.9090909090909091
+      },
+      "help": {
+        "correct": 3,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "journal_add": {
+        "correct": 5,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "journal_list": {
+        "correct": 3,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "memory_forget": {
+        "correct": 5,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "memory_recall": {
+        "correct": 5,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "memory_save": {
+        "correct": 5,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "note_add": {
+        "correct": 3,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "note_delete": {
+        "correct": 1,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.2,
+        "f1": 0.33333333333333337
+      },
+      "note_delete_one": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "note_list": {
+        "correct": 3,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "note_search": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "open_settings": {
+        "correct": 5,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1": 1.0
+      },
+      "task_add": {
+        "correct": 3,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "task_done": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "task_list": {
+        "correct": 3,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.6,
+        "f1": 0.7499999999999999
+      },
+      "task_search": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "time": {
+        "correct": 4,
+        "support": 5,
+        "precision": 1.0,
+        "recall": 0.8,
+        "f1": 0.888888888888889
+      },
+      "unknown": {
+        "correct": 5,
+        "support": 5,
+        "precision": 0.16129032258064516,
+        "recall": 1.0,
+        "f1": 0.27777777777777773
+      }
+    },
+    "errors": [
+      {
+        "text": "show the instructions for using you",
+        "expected": "help",
+        "predicted": "unknown",
+        "confidence": 0.3989
+      },
+      {
+        "text": "ನಿನ್ನ ಆಯ್ಕೆಗಳು ಯಾವುವು",
+        "expected": "help",
+        "predicted": "unknown",
+        "confidence": 0.2613
+      },
+      {
+        "text": "what time does my phone show",
+        "expected": "time",
+        "predicted": "unknown",
+        "confidence": 0.5084
+      },
+      {
+        "text": "मेरे लिए नोट लिखो: कल परीक्षा है",
+        "expected": "note_add",
+        "predicted": "unknown",
+        "confidence": 0.442
+      },
+      {
+        "text": "ನೋಟಿನಲ್ಲಿ ಬರೆಯು: ಇಂದು ಓದು",
+        "expected": "note_add",
+        "predicted": "unknown",
+        "confidence": 0.3771
+      },
+      {
+        "text": "मेरे लिखे नोट्स खोलो",
+        "expected": "note_list",
+        "predicted": "unknown",
+        "confidence": 0.4741
+      },
+      {
+        "text": "list the notes on this device",
+        "expected": "note_list",
+        "predicted": "unknown",
+        "confidence": 0.4268
+      },
+      {
+        "text": "which saved note mentions my exam",
+        "expected": "note_search",
+        "predicted": "unknown",
+        "confidence": 0.3977
+      },
+      {
+        "text": "empty my entire notes collection",
+        "expected": "note_delete",
+        "predicted": "unknown",
+        "confidence": 0.3426
+      },
+      {
+        "text": "wipe the full note collection",
+        "expected": "note_delete",
+        "predicted": "unknown",
+        "confidence": 0.3206
+      },
+      {
+        "text": "सभी नोट्स हटा दो",
+        "expected": "note_delete",
+        "predicted": "unknown",
+        "confidence": 0.1932
+      },
+      {
+        "text": "ನನ್ನ ಎಲ್ಲ ಟಿಪ್ಪಣಿಗಳನ್ನು ತೆಗೆದುಹಾಕು",
+        "expected": "note_delete",
+        "predicted": "unknown",
+        "confidence": 0.4104
+      },
+      {
+        "text": "ಈ ಮೊಬೈಲ್ ಬಗ್ಗೆ ಮಾಹಿತಿ ಕೊಡು",
+        "expected": "device_info",
+        "predicted": "unknown",
+        "confidence": 0.3037
+      },
+      {
+        "text": "which Android release is installed here",
+        "expected": "device_info",
+        "predicted": "unknown",
+        "confidence": 0.4319
+      },
+      {
+        "text": "गणना करो 14 जोड़ 19",
+        "expected": "calculate",
+        "predicted": "unknown",
+        "confidence": 0.1857
+      },
+      {
+        "text": "ಈ ಲೆಕ್ಕ ಹಾಕು: 8 + 6",
+        "expected": "calculate",
+        "predicted": "unknown",
+        "confidence": 0.2252
+      },
+      {
+        "text": "ನಂತರ ಮಾತನಾಡೋಣ ಅಮ್ಮು",
+        "expected": "goodbye",
+        "predicted": "greeting",
+        "confidence": 0.6651
+      },
+      {
+        "text": "please stop this request",
+        "expected": "cancel",
+        "predicted": "unknown",
+        "confidence": 0.5398
+      },
+      {
+        "text": "put revise calculus on my to-do list",
+        "expected": "task_add",
+        "predicted": "calculate",
+        "confidence": 0.9888
+      },
+      {
+        "text": "make an item to pack my charger",
+        "expected": "task_add",
+        "predicted": "unknown",
+        "confidence": 0.4509
+      },
+      {
+        "text": "tell me my unfinished to-dos",
+        "expected": "task_list",
+        "predicted": "unknown",
+        "confidence": 0.1585
+      },
+      {
+        "text": "ನನ್ನ ಅಪೂರ್ಣ ಕಾರ್ಯಗಳನ್ನು ಓದು",
+        "expected": "task_list",
+        "predicted": "unknown",
+        "confidence": 0.2996
+      },
+      {
+        "text": "finish the item numbered 3",
+        "expected": "task_done",
+        "predicted": "unknown",
+        "confidence": 0.5056
+      },
+      {
+        "text": "show the things I wrote on past days",
+        "expected": "journal_list",
+        "predicted": "unknown",
+        "confidence": 0.2867
+      },
+      {
+        "text": "मेरी जर्नल एंट्रीज पढ़ो",
+        "expected": "journal_list",
+        "predicted": "unknown",
+        "confidence": 0.4163
+      },
+      {
+        "text": "ನನ್ನ ಅಮ್ಮು ಡೇಟಾವನ್ನು ಉಳಿಸಿ",
+        "expected": "backup",
+        "predicted": "unknown",
+        "confidence": 0.3939
+      },
+      {
+        "text": "search the checklist for phone recharge",
+        "expected": "task_search",
+        "predicted": "unknown",
+        "confidence": 0.4604
+      },
+      {
+        "text": "केवल तीसरा नोट हटाओ",
+        "expected": "note_delete_one",
+        "predicted": "unknown",
+        "confidence": 0.2289
+      }
+    ]
+  }
+}

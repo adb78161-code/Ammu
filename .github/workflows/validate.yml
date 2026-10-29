@@ -1,0 +1,55 @@
+name: Validate Ammu 1.0 (CI debug APK only)
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate-and-build-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Set up local brain training tools
+        run: python3 -m pip install --disable-pip-version-check -r requirements-train.txt
+      - name: Test deterministic tokenizer, data split, and neural training loop
+        run: python3 -m unittest discover -s tests -v
+      - name: Compile and test Java safety guards and calculator logic
+        run: python3 tools/test_java_logic.py
+      - name: Evaluate from-scratch training pipeline on held-out phrases
+        run: python3 tools/train_brain.py --epochs 200 --hidden 72 --weight-decay 0.001 --min-heldout-accuracy 0.60
+      - name: Evaluate bundled model on fixed independent multilingual benchmark
+        run: python3 tools/evaluate_brain.py --report evaluation/ci-independent-brain-report.json
+      - name: Evaluate bundled model on the secondary phrase benchmark
+        run: python3 tools/evaluate_brain.py --benchmark app/src/main/assets/brain-benchmark-v2.json --report evaluation/ci-secondary-brain-report.json
+      - name: Validate bundled custom brain and smoke-test intents
+        run: python3 tools/validate_brain.py
+      - name: Validate official source, privacy info and release-signing configuration
+        run: python3 tools/validate_release_source.py
+      - name: Upload evaluation reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: ammu-1.0-ci-evaluation-reports-not-for-release
+          path: |
+            evaluation/ci-independent-brain-report.json
+            evaluation/ci-secondary-brain-report.json
+          if-no-files-found: error
+      - name: Build CI/debug APK (not the official signed release)
+        run: gradle --no-daemon assembleDebug
+      - name: Upload CI/debug APK (not for official distribution)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ammu-1.0-ci-debug-apk-not-for-release
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

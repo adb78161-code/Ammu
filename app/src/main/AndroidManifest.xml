@@ -1,0 +1,46 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+        <!-- Android 11+ package visibility: only packages used by the allow-listed launcher are queried. -->
+        <package android:name="com.google.android.deskclock" />
+        <package android:name="com.google.android.calculator" />
+        <package android:name="com.google.android.calendar" />
+        <package android:name="com.google.android.contacts" />
+        <package android:name="com.google.android.dialer" />
+        <package android:name="com.google.android.apps.messaging" />
+        <package android:name="com.google.android.documentsui" />
+        <package android:name="com.google.android.apps.photos" />
+        <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.vivo.calculator" />
+        <package android:name="com.vivo.deskclock" />
+        <package android:name="com.vivo.calendar" />
+        <package android:name="com.vivo.contacts" />
+        <package android:name="com.vivo.filemanager" />
+    </queries>
+
+    <application
+        android:theme="@android:style/Theme.Material.Light.NoActionBar"
+        android:label="Ammu 1.0"
+        android:icon="@mipmap/ic_ammu"
+        android:roundIcon="@mipmap/ic_ammu"
+        android:usesCleartextTraffic="false"
+        android:allowBackup="false"
+        android:supportsRtl="true">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:screenOrientation="unspecified">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

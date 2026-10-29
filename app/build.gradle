@@ -1,0 +1,51 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.ammu.assistant'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.ammu.assistant'
+        minSdk 26
+        targetSdk 35
+        versionCode 22
+        versionName '1.0'
+    }
+
+    // Never commit a signing key or credentials. The official workflow supplies these
+    // environment variables from GitHub Actions secrets at build time.
+    signingConfigs {
+        release {
+            def keystorePath = System.getenv('AMMU_KEYSTORE_PATH')
+            def storePasswordEnv = System.getenv('AMMU_KEYSTORE_PASSWORD')
+            def aliasEnv = System.getenv('AMMU_KEY_ALIAS')
+            def keyPasswordEnv = System.getenv('AMMU_KEY_PASSWORD')
+            if (keystorePath && storePasswordEnv && aliasEnv && keyPasswordEnv) {
+                storeFile file(keystorePath)
+                storePassword storePasswordEnv
+                keyAlias aliasEnv
+                keyPassword keyPasswordEnv
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            // CI/debug APKs are for validation only, not the official distribution artifact.
+        }
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+        }
+    }
+}
+
+// Fail closed if someone requests an official release build without a complete
+// signing setup; Gradle must not silently produce an unsigned release APK.
+def requestedRelease = gradle.startParameter.taskNames.any { it.toLowerCase().contains('assemblerelease') || it.toLowerCase().contains('bundlerelease') }
+def signingReady = ['AMMU_KEYSTORE_PATH','AMMU_KEYSTORE_PASSWORD','AMMU_KEY_ALIAS','AMMU_KEY_PASSWORD'].every { name ->
+    def value = System.getenv(name)
+    value != null && !value.trim().isEmpty()
+}
+if (requestedRelease && !signingReady) {
+    throw new GradleException('Official Ammu 1.0 release requires AMMU_KEYSTORE_PATH, AMMU_KEYSTORE_PASSWORD, AMMU_KEY_ALIAS and AMMU_KEY_PASSWORD. See RELEASE_SIGNING_GUIDE.md.')
+}

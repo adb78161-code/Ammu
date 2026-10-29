@@ -1,0 +1,92 @@
+name: Build Ammu 1.0 Official Signed APK
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  official-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Verify required signing secrets are configured
+        env:
+          AMMU_KEYSTORE_BASE64: ${{ secrets.AMMU_KEYSTORE_BASE64 }}
+          AMMU_KEYSTORE_PASSWORD: ${{ secrets.AMMU_KEYSTORE_PASSWORD }}
+          AMMU_KEY_ALIAS: ${{ secrets.AMMU_KEY_ALIAS }}
+          AMMU_KEY_PASSWORD: ${{ secrets.AMMU_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in AMMU_KEYSTORE_BASE64 AMMU_KEYSTORE_PASSWORD AMMU_KEY_ALIAS AMMU_KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required GitHub Actions secret: ${name}"
+              missing=1
+            fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            echo "Read RELEASE_SIGNING_GUIDE.md, configure all four secrets, then rerun this workflow. No APK was built."
+            exit 1
+          fi
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Set up local brain training tools
+        run: python3 -m pip install --disable-pip-version-check -r requirements-train.txt
+      - name: Run Python unit tests
+        run: python3 -m unittest discover -s tests -v
+      - name: Compile and test Java safety guards and calculator logic
+        run: python3 tools/test_java_logic.py
+      - name: Evaluate from-scratch training pipeline on held-out phrases
+        run: python3 tools/train_brain.py --epochs 200 --hidden 72 --weight-decay 0.001 --min-heldout-accuracy 0.60
+      - name: Validate bundled custom brain
+        run: python3 tools/validate_brain.py
+      - name: Validate official source and signing configuration
+        run: python3 tools/validate_release_source.py
+      - name: Prepare the official signing key securely
+        env:
+          AMMU_KEYSTORE_BASE64: ${{ secrets.AMMU_KEYSTORE_BASE64 }}
+          AMMU_KEYSTORE_PASSWORD: ${{ secrets.AMMU_KEYSTORE_PASSWORD }}
+          AMMU_KEY_ALIAS: ${{ secrets.AMMU_KEY_ALIAS }}
+          AMMU_KEY_PASSWORD: ${{ secrets.AMMU_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +x
+          KEYSTORE_PATH="$RUNNER_TEMP/ammu-release.jks"
+          printf '%s' "$AMMU_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+          keytool -list -keystore "$KEYSTORE_PATH" -storepass "$AMMU_KEYSTORE_PASSWORD" >/dev/null
+          echo "AMMU_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+      - name: Build signed official release APK
+        env:
+          AMMU_KEYSTORE_PASSWORD: ${{ secrets.AMMU_KEYSTORE_PASSWORD }}
+          AMMU_KEY_ALIAS: ${{ secrets.AMMU_KEY_ALIAS }}
+          AMMU_KEY_PASSWORD: ${{ secrets.AMMU_KEY_PASSWORD }}
+        run: gradle --no-daemon clean assembleRelease
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+      - name: Create SHA-256 checksum
+        run: sha256sum app/build/outputs/apk/release/app-release.apk > app-release.apk.sha256
+      - name: Upload official signed APK and checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: ammu-1.0-official-signed-apk
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app-release.apk.sha256
+          if-no-files-found: error
