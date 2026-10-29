@@ -213,10 +213,17 @@ def main() -> int:
         parser.error("Promotion must use the designated v1 promotion benchmark; evaluate v2 separately")
     rows = load_benchmark(args.benchmark)
     model = load_model(args.model)
-    metrics = score(model, rows)
+    benchmark_labels = {row["label"] for row in rows}
+    model_labels = set(model["labels"])
+    if not model_labels.issubset(benchmark_labels):
+        raise SystemExit("Model labels are not covered by the fixed benchmark")
+    comparable_rows = [row for row in rows if row["label"] in model_labels]
+    metrics = score(model, comparable_rows)
     benchmark_data = json.loads(args.benchmark.read_text(encoding="utf-8"))
     benchmark_id = benchmark_data.get("format", "unknown")
     print(fmt(metrics, f"Ammu benchmark {benchmark_id} — {args.model.name}"))
+    if len(comparable_rows) != len(rows):
+        print(f"Baseline model does not yet include {len(rows) - len(comparable_rows)} new conversational examples; those are evaluated against the candidate below.")
     report = {"benchmark": benchmark_id, "benchmark_path": str(args.benchmark), "model": str(args.model), "metrics": metrics}
     gate_pass = None
     candidate_metrics = None
@@ -226,23 +233,30 @@ def main() -> int:
         if candidate_path == base_path:
             raise SystemExit("Candidate path cannot be the bundled production brain itself")
         candidate = load_model(candidate_path)
-        if set(candidate["labels"]) != set(model["labels"]):
-            raise SystemExit("Candidate labels must match the bundled model")
+        if set(candidate["labels"]) != benchmark_labels:
+            raise SystemExit("Candidate labels must match the complete fixed benchmark")
         candidate_metrics = score(candidate, rows)
         print("\n" + fmt(candidate_metrics, f"Candidate evaluation — {candidate_path.name}"))
         base_per = metrics["per_label"]
         candidate_per = candidate_metrics["per_label"]
         regressions = {label: round(base_per[label]["recall"] - candidate_per[label]["recall"], 4) for label in base_per if base_per[label]["recall"] - candidate_per[label]["recall"] > args.max_class_regression + 1e-12}
-        accuracy_gain = candidate_metrics["accuracy"] - metrics["accuracy"]
-        macro_recall_gain = candidate_metrics["macro_recall"] - metrics["macro_recall"]
-        gate_pass = accuracy_gain >= args.min_improvement and macro_recall_gain >= 0 and not regressions
+        new_labels = benchmark_labels - model_labels
+        baseline_correct = sum(predict(row["text"], model)[0] == row["label"] for row in rows)
+        baseline_accuracy = baseline_correct / len(rows)
+        baseline_macro_recall = sum(item["recall"] for item in metrics["per_label"].values()) / len(benchmark_labels)
+        accuracy_gain = candidate_metrics["accuracy"] - baseline_accuracy
+        macro_recall_gain = candidate_metrics["macro_recall"] - baseline_macro_recall
+        new_label_recall = {label: candidate_metrics["per_label"][label]["recall"] for label in new_labels}
+        gate_pass = accuracy_gain >= args.min_improvement and macro_recall_gain >= 0 and not regressions and all(recall >= 0.6 for recall in new_label_recall.values())
         print("\nPROMOTION GATE: " + ("PASS" if gate_pass else "FAIL"))
-        print(f"Accuracy change: {accuracy_gain*100:+.2f} percentage points (required +{args.min_improvement*100:.2f}); macro recall change: {macro_recall_gain*100:+.2f} points")
+        print(f"Accuracy change over all benchmark rows: {accuracy_gain*100:+.2f} percentage points (required +{args.min_improvement*100:.2f}); macro recall change: {macro_recall_gain*100:+.2f} points")
         if regressions:
             print("Intent recall regressions beyond allowed tolerance: " + ", ".join(f"{k}={v*100:.1f} points" for k, v in sorted(regressions.items())))
+        if new_label_recall:
+            print("New intent held-out recall: " + ", ".join(f"{label}={recall*100:.1f}%" for label, recall in sorted(new_label_recall.items())))
         report["candidate"] = str(candidate_path)
         report["candidate_metrics"] = candidate_metrics
-        report["promotion_gate"] = {"passed": gate_pass, "min_accuracy_improvement": args.min_improvement, "accuracy_change": accuracy_gain, "macro_recall_change": macro_recall_gain, "max_class_regression": args.max_class_regression, "class_regressions": regressions}
+        report["promotion_gate"] = {"passed": gate_pass, "min_accuracy_improvement": args.min_improvement, "accuracy_change": accuracy_gain, "macro_recall_change": macro_recall_gain, "max_class_regression": args.max_class_regression, "class_regressions": regressions, "new_label_recall": new_label_recall}
         if args.promote:
             if not gate_pass:
                 raise SystemExit("Candidate did not pass the independent benchmark gate; bundled brain.json was not changed.")

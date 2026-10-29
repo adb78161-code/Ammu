@@ -1,4 +1,15 @@
-# Ammu 1.0 — Release notes
+# Ammu 1.1 — Source upgrade notes
+
+This source upgrade is not an official release; no signed APK or physical-device validation was produced.
+
+- Added deterministic conversational intent handling for greetings, identity and wellbeing questions, corrections, follow-ups, ordinary questions, and emotional statements.
+- Added a separately labeled `conversation` category to the from-scratch intent training corpus and two held-out benchmarks.
+- Added typed local memories for stable facts, preferences, and expiring temporary context; explicit corrections update matching facts, while sensitive facts require confirmation.
+- Added commands to inspect, search, correct, and delete memories. Clearing conversation history continues to preserve memories.
+- Replaced the generic speech activity with Android's on-device `SpeechRecognizer`, including service and language-model checks, with no online fallback.
+- Kept neural model predictions, deterministic responses, and retrieved memories distinct. Memory writes do not alter model weights.
+
+## Ammu 1.0 — Historical release notes
 
 ## Official version source
 

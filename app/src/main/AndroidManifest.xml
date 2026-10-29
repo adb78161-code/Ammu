@@ -3,9 +3,6 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <queries>
-        <intent>
-            <action android:name="android.speech.RecognitionService" />
-        </intent>
         <!-- Android 11+ package visibility: only packages used by the allow-listed launcher are queried. -->
         <package android:name="com.google.android.deskclock" />
         <package android:name="com.google.android.calculator" />
@@ -27,7 +24,7 @@
 
     <application
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
-        android:label="Ammu 1.0"
+        android:label="Ammu 1.4"
         android:icon="@mipmap/ic_ammu"
         android:roundIcon="@mipmap/ic_ammu"
         android:usesCleartextTraffic="false"

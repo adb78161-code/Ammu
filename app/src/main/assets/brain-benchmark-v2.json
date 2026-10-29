@@ -255,6 +255,22 @@
       "label": "task_add"
     },
     {
+      "text": "What should I call you?",
+      "label": "conversation"
+    },
+    {
+      "text": "You all right, Ammu?",
+      "label": "conversation"
+    },
+    {
+      "text": "What does that refer to?",
+      "label": "conversation"
+    },
+    {
+      "text": "I need to correct what I said",
+      "label": "conversation"
+    },
+    {
       "text": "I need a new reminder task to pay rent",
       "label": "task_add"
     },

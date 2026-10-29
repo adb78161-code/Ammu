@@ -3,12 +3,35 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.ammu.assistant'
     compileSdk 35
+    androidResources {
+        noCompress 'gguf'
+    }
+    aaptOptions {
+        noCompress 'gguf'
+    }
     defaultConfig {
         applicationId 'com.ammu.assistant'
         minSdk 26
         targetSdk 35
-        versionCode 22
-        versionName '1.0'
+        versionCode 24
+        versionName '1.4'
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+        externalNativeBuild {
+            cmake {
+                arguments '-DANDROID_STL=c++_shared', '-DANDROID_PLATFORM=android-26', '-DANDROID_ARM_NEON=ON', '-DLLAMA_BUILD_TESTS=OFF', '-DLLAMA_BUILD_EXAMPLES=OFF', '-DLLAMA_BUILD_SERVER=OFF', '-DLLAMA_BUILD_COMMON=ON', '-DGGML_NATIVE=OFF'
+            }
+        }
+    }
+
+    ndkVersion '27.2.12479018'
+
+    externalNativeBuild {
+        cmake {
+            path 'src/main/cpp/CMakeLists.txt'
+            version '3.22.1'
+        }
     }
 
     // Never commit a signing key or credentials. The official workflow supplies these
@@ -47,5 +70,5 @@ def signingReady = ['AMMU_KEYSTORE_PATH','AMMU_KEYSTORE_PASSWORD','AMMU_KEY_ALIA
     value != null && !value.trim().isEmpty()
 }
 if (requestedRelease && !signingReady) {
-    throw new GradleException('Official Ammu 1.0 release requires AMMU_KEYSTORE_PATH, AMMU_KEYSTORE_PASSWORD, AMMU_KEY_ALIAS and AMMU_KEY_PASSWORD. See RELEASE_SIGNING_GUIDE.md.')
+    throw new GradleException('Official Ammu 1.4 release requires AMMU_KEYSTORE_PATH, AMMU_KEYSTORE_PASSWORD, AMMU_KEY_ALIAS and AMMU_KEY_PASSWORD. See RELEASE_SIGNING_GUIDE.md.')
 }

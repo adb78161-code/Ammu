@@ -6,6 +6,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "app/src/main/java/com/ammu/assistant/MainActivity.java"
+CONVERSATION_LOGIC = ROOT / "app/src/main/java/com/ammu/assistant/ConversationLogic.java"
+PIPELINE = ROOT / "app/src/main/java/com/ammu/assistant/ConversationPipeline.java"
 
 
 def exact_line(prefix: str) -> str:
@@ -29,7 +31,8 @@ def main() -> None:
     safety = source[source.index("    String safetyResponse("):source.index("    // The small model", source.index("    String safetyResponse("))]
     char_features = source[source.index("    void addCharacterFeatures("):source.index("    // Correct only an unknown", source.index("    void addCharacterFeatures("))]
 
-    harness = r'''import java.util.*;
+    harness = r'''package com.ammu.assistant;
+import java.util.*;
 import java.util.regex.*;
 public class AmmuLogicHarness {
 ''' + helpers + '\n' + normalizer + '\n' + emotions + '\n' + safety + '\n' + char_features + "\n" + strip_prefix + "\n" + calc + r'''
@@ -72,16 +75,57 @@ public class AmmuLogicHarness {
         boolean rejected = false;
         try { new Calc("3/0").parse(); } catch (RuntimeException expected) { rejected = true; }
         check(rejected, "division by zero rejected");
-        System.out.println("PASS: 32 Java logic, multilingual normalization, character features, emotion, settings gate and calculator tests");
+        check("identity".equals(ConversationLogic.classify("What's your name?")), "identity question recognized separately");
+        check("wellbeing".equals(ConversationLogic.classify("Are you okay?")), "assistant wellbeing question recognized separately");
+        check("wellbeing".equals(ConversationLogic.classify("You all right, Ammu?")), "informal wellbeing question recognized");
+        check("identity".equals(ConversationLogic.classify("What should I call you?")), "alternate identity question recognized");
+        check("follow_up".equals(ConversationLogic.classify("What is it?")), "ambiguous follow-up recognized separately");
+        check("ordinary_question".equals(ConversationLogic.classify("Who is the author?")), "ordinary question recognized");
+        check("correction".equals(ConversationLogic.classify("I need to correct what I said")), "correction request recognized");
+        check("greeting".equals(ConversationLogic.classify("Good morning, Ammu")), "greeting recognized");
+        check("correction".equals(ConversationLogic.classify("Actually, my name is Mira")), "correction recognized");
+        check(ConversationLogic.followUpResponse("what is it?", "I mentioned my exam", "What worries you most?").contains("I mentioned my exam"), "follow-up uses the immediately previous topic");
+        check("favorite color".equals(ConversationLogic.personalMemoryQuestionSubject("What's my favorite color?")), "personal memory question extracts its subject");
+        check("name".equals(ConversationLogic.personalMemoryQuestionSubject("What is my name?")), "personal name question extracts its subject");
+        check(ConversationLogic.followUpResponse("what is it?", "", "").contains("What does"), "context-free follow-up asks for clarification");
+        check(ConversationLogic.questionClarification("Who is that?").contains("Which person"), "unknown who-question requests relevant clarification");
+        check("personal_fact".equals(ConversationLogic.memoryType("my name is Mira")), "stable fact has separate memory type");
+        check("preference".equals(ConversationLogic.memoryType("I prefer concise replies")), "preference has separate memory type");
+        check("temporary".equals(ConversationLogic.memoryType("for today: bring water")), "temporary context has separate memory type");
+        check("my name".equals(ConversationLogic.memoryKey("my name is Mira")), "fact correction key uses the stable subject");
+        check(ConversationLogic.isExplicitCorrection("Actually, my name is Mira"), "explicit correction is recognized");
+        check(!ConversationLogic.isExplicitCorrection("maybe my name is Mira"), "uncertain inference is not treated as an explicit correction");
+        check(ConversationLogic.isExplicitCorrection("Actually, I prefer Kannada replies"), "explicit preference correction is recognized");
+        check(ConversationLogic.isExplicitPreference("I prefer Kannada replies"), "explicit preference is saved locally");
+        check(ConversationLogic.isSensitive("remember that my password is secret"), "sensitive memories require confirmation");
+        check(ConversationLogic.supportsOnDeviceLanguage(Arrays.asList("en-US", "hi-IN"), "hi-IN"), "installed offline locale is accepted");
+        check(!ConversationLogic.supportsOnDeviceLanguage(Arrays.asList("en-US"), "kn-IN"), "missing offline locale is rejected");
+        ConversationPipeline pipeline = new ConversationPipeline(text -> "unknown");
+        check("identity".equals(pipeline.respond("What's your name?", Arrays.asList()).intent), "pipeline recognizes identity paraphrase");
+        check("wellbeing".equals(pipeline.respond("Are you okay?", Arrays.asList()).intent), "pipeline recognizes wellbeing paraphrase");
+        check("knowledge_question".equals(pipeline.respond("Explain artificial intelligence.", Arrays.asList()).intent), "pipeline explains local knowledge topic");
+        pipeline.respond("Explain artificial intelligence.", Arrays.asList());
+        check("follow_up".equals(pipeline.respond("What is it?", Arrays.asList()).intent), "pipeline resolves ambiguous it after a topic");
+        pipeline.respond("Explain artificial intelligence.", Arrays.asList());
+        check("follow_up".equals(pipeline.respond("Why?", Arrays.asList()).intent), "pipeline resolves why after a topic");
+        check(pipeline.respond("Tell me about quantum teleportation economics", Arrays.asList()) == null, "unknown knowledge remains explicitly unknown");
+        check("memory_recall".equals(pipeline.respond("What colour do I like?", Arrays.asList("I prefer blue")).intent), "pipeline recalls a saved preference");
+        System.out.println("PASS: 54 Java logic tests covering conversation intent/context, memory classification, offline language checks, multilingual normalization, emotion, safety and calculator");
     }
     static void check(boolean passed, String what) { if (!passed) throw new AssertionError(what); }
 }
 '''
     with tempfile.TemporaryDirectory(prefix="ammu-v9-java-test-") as directory:
-        java_file = Path(directory) / "AmmuLogicHarness.java"
+        package_dir = Path(directory) / "com" / "ammu" / "assistant"
+        package_dir.mkdir(parents=True)
+        java_file = package_dir / "AmmuLogicHarness.java"
         java_file.write_text(harness, encoding="utf-8")
-        subprocess.run(["javac", str(java_file)], check=True, cwd=directory)
-        subprocess.run(["java", "-cp", directory, "AmmuLogicHarness"], check=True, cwd=directory)
+        logic_file = package_dir / "ConversationLogic.java"
+        logic_file.write_text(CONVERSATION_LOGIC.read_text(encoding="utf-8"), encoding="utf-8")
+        pipeline_file = package_dir / "ConversationPipeline.java"
+        pipeline_file.write_text(PIPELINE.read_text(encoding="utf-8"), encoding="utf-8")
+        subprocess.run(["javac", "-d", directory, str(java_file), str(logic_file), str(pipeline_file)], check=True, cwd=directory)
+        subprocess.run(["java", "-cp", directory, "com.ammu.assistant.AmmuLogicHarness"], check=True, cwd=directory)
 
 
 if __name__ == "__main__":

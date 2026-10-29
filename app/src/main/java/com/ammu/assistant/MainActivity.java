@@ -15,7 +15,10 @@ import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.BatteryManager;
 import android.speech.tts.TextToSpeech;
-import android.speech.RecognizerIntent;
+import android.speech.RecognitionListener;
+import android.speech.RecognitionSupport;
+import android.speech.RecognitionSupportCallback;
+import android.speech.SpeechRecognizer;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.Gravity;
@@ -24,6 +27,9 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 import org.json.*;
 import java.io.*;
+import java.security.MessageDigest;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.regex.*;
@@ -34,14 +40,26 @@ import java.util.zip.ZipOutputStream;
 public class MainActivity extends Activity {
     private static final int REQ_AUDIO_PERMISSION = 8101;
     private static final int REQ_IMPORT_AUDIO = 8102;
-    private static final int REQ_SPEECH_INPUT = 8103;
     private static final int REQ_EXPORT_BACKUP = 8104;
     private static final int REQ_IMPORT_BACKUP = 8105;
     private static final int REQ_EXPORT_BRAIN_EXAMPLES = 8106;
     private static final int REQ_IMPORT_BRAIN_EXAMPLES = 8107;
     private static final int REQ_EXPORT_PHONE_MISTAKES = 8108;
+    private static final int REQ_SPEECH_PERMISSION = 8109;
     private static final int MAX_BACKUP_BYTES = 24 * 1024 * 1024;
     LinearLayout messages; EditText input; ScrollView scroll; TextToSpeech tts;
+    private SpeechRecognizer speechRecognizer;
+    private boolean speechListening;
+    private ConversationPipeline conversationPipeline;
+    private QwenNativeEngine qwenEngine;
+    private final ExecutorService qwenExecutor = Executors.newSingleThreadExecutor();
+    private volatile boolean qwenReady = false;
+    private volatile String qwenLoadError = "";
+    private volatile boolean qwenNativeLibraryLoaded = false;
+    private volatile boolean qwenInferenceReached = false;
+    private volatile int qwenGeneratedTokenCount = 0;
+    private volatile String qwenInferenceFailure = "";
+    private LocalMemoryDatabase localMemoryDatabase;
     JSONObject brain; JSONArray notes, tasks, memory, journal, moodLog, conversationHistory, brainExamples; JSONObject customAliases = new JSONObject(); boolean speakEnabled=true;
     private boolean preferRecordedVoice = true;
     private boolean isRecording = false;
@@ -71,11 +89,12 @@ public class MainActivity extends Activity {
     int bg=Color.rgb(12,17,31), panel=Color.rgb(24,32,52), accent=Color.rgb(117,161,255), fg=Color.rgb(240,244,255), muted=Color.rgb(164,178,204);
 
     @Override public void onCreate(Bundle b){super.onCreate(b); getWindow().setStatusBarColor(bg);getWindow().setNavigationBarColor(bg);getWindow().getDecorView().setSystemUiVisibility(0);
-        prefs=getSharedPreferences("ammu_data",MODE_PRIVATE); loadData(); loadBrain(); replyStyle=prefs.getString("reply_style","balanced"); lastEmotion=prefs.getString("last_emotion",""); lastTopic=prefs.getString("last_topic","");
+        prefs=getSharedPreferences("ammu_data",MODE_PRIVATE); loadData(); loadBrain(); localMemoryDatabase=new LocalMemoryDatabase(this); rebuildLocalMemoryDatabase(); conversationPipeline=new ConversationPipeline(this::predict); replyStyle=prefs.getString("reply_style","balanced"); lastEmotion=prefs.getString("last_emotion",""); lastTopic=prefs.getString("last_topic","");
+        initializeQwen();
         speakEnabled=prefs.getBoolean("speak_enabled",true); preferRecordedVoice=prefs.getBoolean("prefer_recorded_voice",true);
         lastPlanGoal=prefs.getString("last_plan_goal",""); lastPlanText=prefs.getString("last_plan_text",""); buildUi();
         initializeTts();
-        addMessage("Ammu", "I'm Ammu 1.0, your personal assistant with a custom local AI brain. Your notes, tasks, memories, journal, and voice clips are stored locally by Ammu. Type 'help' or 'privacy and offline info' to explore. Voice recognition is provided by Android and may use network services depending on your selected recognizer.", false);
+        addMessage("Ammu", "I'm Ammu 1.4, your private offline assistant. I use bundled Qwen for general conversation and deterministic tools for notes, tasks, and device commands. Your notes, tasks, memories, journal, and voice clips stay on this phone. Type 'help' or 'privacy and offline info' to explore. Voice input requires an installed Android on-device speech model and is never sent online.", false);
         if (!brainReady) addMessage("Ammu", "Warning: the bundled custom brain could not be validated (" + brainLoadIssue + "). Explicit offline commands may still work, but intent recognition is unavailable. Open TOOLS → Brain diagnostics.", false);
         if (!dataLoadWarnings.isEmpty()) addMessage("Ammu", "Some local data could not be read: " + dataLoadWarnings + ". Restore from a recent Ammu backup if you have one.", false);
     }
@@ -167,6 +186,80 @@ public class MainActivity extends Activity {
     }
 
     void send(){String s=input.getText().toString().trim();if(s.isEmpty())return;input.setText("");runCommand(s);}
+    private void initializeQwen() {
+        qwenExecutor.execute(() -> {
+            File model = new File(getFilesDir(), "Qwen3-0.6B-Q8_0.gguf");
+            try {
+                if (!model.isFile() || !"9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031".equals(sha256(model))) {
+                    try (InputStream source = getAssets().open("models/Qwen3-0.6B-Q8_0.gguf");
+                         OutputStream target = new FileOutputStream(model)) {
+                        byte[] buffer = new byte[1024 * 1024];
+                        int count;
+                        while ((count = source.read(buffer)) >= 0) {
+                            if (count > 0) target.write(buffer, 0, count);
+                        }
+                    }
+                }
+            } catch (Exception error) {
+                android.util.Log.e("Ammu", "Could not install the bundled Qwen model", error);
+                qwenLoadError = qwenErrorMessage(error);
+                return;
+            }
+            try {
+                if (!"9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031".equals(sha256(model))) {
+                    android.util.Log.e("Ammu", "Bundled Qwen checksum validation failed");
+                    qwenLoadError = "The bundled Qwen model checksum did not match";
+                    return;
+                }
+                QwenNativeEngine engine = new QwenNativeEngine();
+                qwenNativeLibraryLoaded = true;
+                if (engine.load(model.getAbsolutePath(), 2048)) {
+                    qwenEngine = engine;
+                    qwenReady = true;
+                    android.util.Log.i("AmmuConversation", "native_init=ready");
+                } else {
+                    android.util.Log.e("AmmuConversation", "native_init=failed load=false");
+                    qwenLoadError = "Native model load returned an error";
+                }
+            } catch (Exception error) {
+                qwenNativeLibraryLoaded = error.getClass().getSimpleName().contains("UnsatisfiedLink") ? false : qwenNativeLibraryLoaded;
+                android.util.Log.e("Ammu", "Could not initialize native Qwen inference", error);
+                android.util.Log.e("AmmuConversation", "native_init=failed type=" + error.getClass().getSimpleName());
+                qwenLoadError = qwenErrorMessage(error);
+            }
+        });
+    }
+
+    private static String qwenErrorMessage(Throwable error) {
+        String message = error == null ? null : error.getMessage();
+        if (message == null || message.trim().isEmpty()) message = error == null ? "Unknown native error" : error.getClass().getSimpleName();
+        return message.trim().replaceAll("\\s+", " ");
+    }
+
+    private static String sha256(File file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream input = new FileInputStream(file)) {
+            byte[] buffer = new byte[1024 * 1024];
+            int count;
+            while ((count = input.read(buffer)) >= 0) {
+                if (count > 0) digest.update(buffer, 0, count);
+            }
+        }
+        StringBuilder result = new StringBuilder();
+        for (byte value : digest.digest()) result.append(String.format(Locale.ROOT, "%02x", value));
+        return result.toString();
+    }
+
+    private boolean shouldUseQwen(String raw, String dialogueIntent, String intent, ConversationPipeline.Result pipelineResult) {
+        if (raw == null) return false;
+        String normalized = raw.toLowerCase(Locale.ROOT).trim();
+        if (ConversationLogic.isExplicitPreference(normalized) || ConversationLogic.isExplicitCorrection(normalized)) return false;
+        if (normalized.matches("^(help|time|date|weather|privacy and offline info|offline privacy|privacy info|check brain|brain status|diagnostics|open app\\b.*|remember\\b.*|correct memory\\b.*|forget memory\\b.*)$")) return false;
+        if (normalized.startsWith("teach ") || normalized.startsWith("add ") || normalized.startsWith("show ") || normalized.startsWith("export ")) return false;
+        return pipelineResult == null || pipelineResult.answer != null
+            || dialogueIntent.equals("greeting") || dialogueIntent.equals("wellbeing") || dialogueIntent.equals("follow_up")
+            || intent.equals("unknown") || normalized.startsWith("explain ");
+    }
     void runCommand(String raw){
         if(raw==null)return;
         raw=raw.trim();
@@ -178,27 +271,79 @@ public class MainActivity extends Activity {
         if(learningMeta!=null){rememberTurn(raw,learningMeta);addMessage("Ammu",learningMeta,true);if(speakEnabled&&tts!=null)tts.speak(learningMeta,TextToSpeech.QUEUE_FLUSH,null,"ammu-learning");return;}
         String aliasMeta=handleCommandAliasCommand(raw);
         if(aliasMeta!=null){rememberTurn(raw,aliasMeta);addMessage("Ammu",aliasMeta,true);if(speakEnabled&&tts!=null)tts.speak(aliasMeta,TextToSpeech.QUEUE_FLUSH,null,"ammu-reply");return;}
-        // Keep the last ordinary phrase so the user can explicitly label a mistake afterward.
-        prefs.edit().putString("last_learning_phrase",raw.trim()).apply();
         String normalizedText=normalizeOfflinePhrase(raw);
         String s=resolveCommandAlias(normalizedText.toLowerCase(Locale.ROOT));
+        boolean sensitiveMemoryRequest=(isExplicitMemorySaveCommand(s)&&(ConversationLogic.isSensitive(memoryFactFromCommand(raw))||ConversationLogic.isUncertain(memoryFactFromCommand(raw))))
+            ||(ConversationLogic.isExplicitCorrection(userText)&&(ConversationLogic.isSensitive(raw)||ConversationLogic.isUncertain(raw)))
+            ||(ConversationLogic.isExplicitPreference(userText)&&(ConversationLogic.isSensitive(raw)||ConversationLogic.isUncertain(raw)));
+        // Keep the last ordinary phrase for corrections, but never retain a sensitive memory command there.
+        if(sensitiveMemoryRequest)prefs.edit().remove("last_learning_phrase").apply();
+        else prefs.edit().putString("last_learning_phrase",raw.trim()).apply();
         String intent=predict(s);
-        prefs.edit().putString("last_learning_predicted",intent).putString("last_learning_normalized",s).apply();
+        if(sensitiveMemoryRequest)prefs.edit().remove("last_learning_predicted").remove("last_learning_normalized").apply();
+        else prefs.edit().putString("last_learning_predicted",intent).putString("last_learning_normalized",s).apply();
+        String dialogueIntent=ConversationLogic.classify(userText);
+        String previousUser=latestConversationUser();
+        String previousAssistant=latestConversationAssistant();
         String answer; try {
+        ConversationPipeline.Result pipelineResult=conversationPipeline.respond(raw,memoryFactsForPipeline());
         // Safety and emotional interpretation always use the original user text, not a custom alias.
         String safety = safetyResponse(userText);
         String emotion = detectEmotion(userText);
+        String memoryCorrection=handleExplicitMemoryCorrection(userText,raw);
         String preferenceResponse = handlePreferenceOrCorrection(userText, raw);
         if(safety != null) answer=safety;
+        else if(shouldUseQwen(raw, dialogueIntent, intent, pipelineResult)) {
+            final String message = raw;
+            String modelPrompt = buildQwenPrompt(message, memoryFactsForPipeline());
+            final String promptForModel = modelPrompt;
+            android.util.Log.i("AmmuConversation", "route=qwen native_ready=" + qwenReady + " pipeline=" + (pipelineResult == null ? "none" : pipelineResult.intent));
+            qwenExecutor.execute(() -> {
+                try {
+                    if (!qwenReady || qwenEngine == null) {
+                        throw new IllegalStateException("Native Qwen engine is not initialized");
+                    }
+                    qwenInferenceReached = true;
+                    qwenInferenceFailure = "";
+                    final int[] generatedTokens = {0};
+                    final String generated = qwenEngine.generate(promptForModel, 256, token -> generatedTokens[0]++);
+                    runOnUiThread(() -> {
+                        qwenGeneratedTokenCount = generatedTokens[0];
+                        if (generated == null || generated.trim().isEmpty()) generatedFallback(message, promptForModel);
+                        else {
+                            android.util.Log.i("AmmuConversation", "generation=success output_chars=" + generated.trim().length());
+                            addMessage("Ammu", generated.trim(), true);
+                            rememberTurn(message, generated.trim());
+                            if (speakEnabled && tts != null) tts.speak(generated.trim(), TextToSpeech.QUEUE_FLUSH, null, "ammu-qwen-reply");
+                        }
+                    });
+                } catch (Exception error) {
+                    qwenInferenceFailure = qwenErrorMessage(error);
+                    android.util.Log.e("AmmuConversation", "generation=failed type=" + error.getClass().getSimpleName() + " reason=" + error.getMessage());
+                    runOnUiThread(() -> generatedFallback(message, error.getMessage()));
+                }
+            });
+            return;
+        }
+        else if(pipelineResult != null && pipelineResult.answer != null) answer=pipelineResult.answer;
+        else if(memoryCorrection != null) answer=memoryCorrection;
         else if(preferenceResponse != null) answer=preferenceResponse;
+        else if(ConversationLogic.isExplicitPreference(userText)){
+            String saved=saveMemoryFact(raw);
+            answer=saved.startsWith("This may be sensitive")?saved:"I'll remember that local preference for future replies. This does not change Ammu's neural model. "+saved;
+        }
+        else if(dialogueIntent.equals("correction")) answer="Of course. What should I correct? For a saved fact, you can say 'correct memory 1 to ...'. I won't guess what the correction is.";
         else if(mixedEmotionReply(userText) != null) answer=mixedEmotionReply(userText);
         else if(isNegatedFeeling(userText)) answer=negatedFeelingReply(userText);
         else if(isFollowUp(userText) && !lastEmotion.isEmpty()) answer=followUpReply(userText);
         else if(emotion != null && isFeelingStatement(userText)) { lastEmotion=emotion; lastTopic=raw; prefs.edit().putString("last_emotion",lastEmotion).putString("last_topic",lastTopic).apply(); answer=emotionReply(emotion, raw); moodLog.put(new JSONObject().put("emotion",emotion).put("text",raw).put("date",now())); trimOldest(moodLog,200); save("mood",moodLog); }
-        else if(s.matches(".*\\b(hello|hi|hey ammu|good morning|good evening)\\b.*")||intent.equals("greeting")) answer="Hello! I'm here. What would you like to do?";
+        else if(dialogueIntent.equals("identity")) answer="My name is Ammu. I'm a private local assistant that uses bundled Qwen for conversation, deterministic tools for app commands, and memories you explicitly save. I don't have a human identity.";
+        else if(dialogueIntent.equals("wellbeing")) answer="I'm operating normally on this phone. I don't have feelings or a body, but I can still help with a question or listen to what is on your mind. How are you?";
+        else if(dialogueIntent.equals("greeting")||intent.equals("greeting")) answer="Hello! I'm here. What would you like to do?";
+        else if(dialogueIntent.equals("follow_up")) answer=ConversationLogic.followUpResponse(userText,previousUser,previousAssistant);
         else if(s.equals("cancel")||intent.equals("cancel")) answer="Okay, I'll stop this command. No saved data was changed.";
         else if(s.equals("privacy and offline info")||s.equals("offline privacy")||s.equals("privacy info")) {showPrivacyAndOfflineInfo();answer="I opened the local privacy and offline-operation details.";}
-        else if(s.equals("help")||intent.equals("help")) answer="I am a custom local intent brain, not a pretrained LLM. I can reason through simple structured plans, remember facts locally, manage notes/tasks/journal, respond to emotional cues, check device status, open supported Android apps/settings, and back up local data. Try: teach intent phrase what time is it => time; show brain labels; export brain examples; break down: study DBMS; add plan to tasks; remember that my exam is Friday; what do you remember about exam; summarize recent conversation; open app camera; check brain; dashboard; privacy and offline info. No cloud AI is used by Ammu itself.";
+        else if(s.equals("help")||intent.equals("help")) answer="I use bundled Qwen for general conversation, plus deterministic rules for notes/tasks/device tools, and memories you explicitly save. I can manage notes/tasks/journal, respond to emotional cues, check device status, open supported Android apps/settings, and back up local data. Try: teach intent phrase what time is it => time; show brain labels; export brain examples; break down: study DBMS; add plan to tasks; remember that my exam is Friday; what do you remember about exam; correct memory 1 to my exam is Monday; forget memory 1; summarize recent conversation; open app camera; check brain; dashboard; privacy and offline info. Saved memories are retrieved locally and do not retrain the model. Voice input is on-device only when supported; typed chat always remains available.";
         else if(s.equals("check brain")||s.equals("brain status")||s.equals("diagnostics")) {showBrainDiagnostics();answer="I opened the local brain diagnostics panel.";}
         else if(s.equals("dashboard")||s.equals("show dashboard")||s.equals("my summary")) answer=dashboardSummary();
         else if(isExplicitNoteAddCommand(s)){String body=noteBodyFromCommand(raw);if(body.isEmpty())answer="Write it like: save a note: buy milk.";else if(notes.length()>=1000)answer="Your local note limit (1,000) is reached. Export a backup, then remove notes you no longer need.";else{notes.put(new JSONObject().put("text",body).put("date",now()));save("notes",notes);answer="Saved that note on this phone.";}}
@@ -206,11 +351,11 @@ public class MainActivity extends Activity {
         else if(isExplicitSingleNoteDelete(s)){Matcher m=Pattern.compile("(\\d+)").matcher(s);if(m.find()){int n=Integer.parseInt(m.group(1))-1;if(n>=0&&n<notes.length()){confirmDeleteNoteAtIndex(n);answer="Please review the note preview and confirm deletion. The note is still saved until you confirm.";}else answer="I couldn't find that note number.";}else answer="Use a numeric note ID, for example: delete note 2.";}
         else if(isExplicitTaskAddCommand(s)){String body=taskBodyFromCommand(raw);String priority="normal";Matcher pm=Pattern.compile("(?i)^(high|urgent|low|normal)\\s*:\\s*(.*)$").matcher(body);if(pm.matches()){priority=pm.group(1).equalsIgnoreCase("urgent")?"high":pm.group(1).toLowerCase(Locale.ROOT);body=pm.group(2).trim();}if(body.isEmpty())answer="Try: add task high: study DBMS.";else if(tasks.length()>=500)answer="Your local task limit (500) is reached. Export a backup, then remove completed tasks before adding more.";else{tasks.put(new JSONObject().put("id",nextTaskId()).put("text",body).put("priority",priority).put("done",false).put("date",now()));save("tasks",tasks);answer="Added "+priority+" priority task: "+body+".";}}
         else if(isExplicitTaskCompletion(s)){Matcher m=Pattern.compile("(\\d+)").matcher(s);if(m.find()){int id=Integer.parseInt(m.group(1));if(findTaskIndexById(id)>=0){confirmCompleteTask(id);answer="Please review the task and confirm completion. No task was changed yet.";}else answer="Task not found.";}else answer="Use: mark task 1 done.";}
-        else if(s.startsWith("remember that")||s.startsWith("remember ")||s.startsWith("save to memory")||(intent.equals("memory_save")&&isExplicitMemorySaveCommand(s))){String body=stripPrefix(raw,"remember that","remember","save to memory","keep in mind that","store fact that","save this personal detail","एक निजी तथ्य सेव करो","ನೆನಪಿಟ್ಟುಕೋ","ಇದನ್ನು ನೆನಪಿಟ್ಟುಕೋ","ನನ್ನ ಇಷ್ಟ ನೆನಪಿಡು","याद रखना","इसे याद रखना","मेरी पसंद याद रखो");if(body.isEmpty())answer="Try: remember that my favorite color is blue.";else answer=saveMemoryFact(body);}
+        else if(s.startsWith("remember that")||s.startsWith("remember ")||s.startsWith("save to memory")||(intent.equals("memory_save")&&isExplicitMemorySaveCommand(s))){String body=memoryFactFromCommand(raw);if(body.isEmpty())answer="Try: remember that my favorite color is blue.";else answer=saveMemoryFact(body);}
         else if(isExplicitJournalAddCommand(s)){String body=stripPrefix(raw,"write in my journal","journal:","write diary","journal entry:","add an entry to my diary","save my thoughts in the journal","write in my diary","diary:","ನನ್ನ ದಿನಚರಿಯಲ್ಲಿ ಉಳಿಸು","ದಿನಚರಿಯಲ್ಲಿ ಬರೆಯು","ಡೈರಿಯಲ್ಲಿ ದಾಖಲಿಸು","मेरी डायरी में सेव करो","डायरी में लिखो","डायरी में दर्ज करो");if(body.isEmpty())answer="Try: write in my journal: today I studied.";else if(journal.length()>=500)answer="Your local journal limit (500 entries) is reached. Export a backup before clearing older entries.";else{journal.put(new JSONObject().put("text",body).put("date",now()));save("journal",journal);answer="Added to your private journal on this phone.";}}
         else if(s.startsWith("search journal")){String q=stripPrefix(raw,"search journal for","search journal").toLowerCase(Locale.ROOT);answer=search(journal,"text",q,"No matching journal entries found.");}
         else if(s.startsWith("search memory")){String q=stripPrefix(s,"search memory for","search memory").toLowerCase(Locale.ROOT);answer=searchRelevantMemory(q);}
-        else if(s.startsWith("what do you remember about ")||s.startsWith("recall facts about ")){String q=stripPrefix(s,"what do you remember about","recall facts about").toLowerCase(Locale.ROOT);if(q.equals("me")||q.isEmpty())answer=list(memory,"fact","No saved facts yet.","I remember:");else answer=searchRelevantMemory(q);}
+        else if(s.startsWith("what do you remember about ")||s.startsWith("recall facts about ")){String q=stripPrefix(s,"what do you remember about","recall facts about").toLowerCase(Locale.ROOT);if(q.equals("me")||q.isEmpty())answer=listMemories();else answer=searchRelevantMemory(q);}
         else if(s.matches("^(forget|delete) memory \\d+$")){Matcher mm=Pattern.compile("(\\d+)").matcher(s);if(mm.find()){int n=Integer.parseInt(mm.group(1))-1;if(n>=0&&n<memory.length()){confirmForgetMemoryAtIndex(n);answer="Please review the saved fact and confirm removal. It remains saved until you confirm.";}else answer="I couldn't find that memory item number.";}else answer="Use: forget memory 2.";}
         else if(s.equals("clear all memory")||s.equals("forget all memory")){confirmClearMemory();answer="Please confirm in the dialog to clear all saved facts.";}
         else if(s.equals("summarize recent conversation")||s.equals("what did we discuss")||s.equals("recap our conversation")||s.equals("show recent conversation")){answer=summarizeRecentConversation();}
@@ -233,20 +378,38 @@ public class MainActivity extends Activity {
         else if(s.startsWith("search tasks")||intent.equals("task_search")){String q=stripPrefix(s,"search tasks for","search tasks").toLowerCase(Locale.ROOT);answer=search(tasks,"text",q,"No matching tasks found.");}
         else if(s.contains("show my tasks")||s.contains("list tasks")||intent.equals("task_list")){StringBuilder out=new StringBuilder();for(int i=0;i<tasks.length();i++){JSONObject t=tasks.optJSONObject(i);if(t!=null&&!t.optBoolean("done"))out.append(t.optInt("id")).append(". [").append(t.optString("priority","normal").toUpperCase(Locale.ROOT)).append("] ").append(t.optString("text")).append("\n");}answer=out.length()==0?"No pending tasks.":"Pending tasks:\n"+out;}
         else if(intent.equals("task_done")) answer="I won't mark anything complete based on a guess. Use an explicit command such as 'mark task 2 done'.";
-        else if(s.contains("what do you remember")||s.contains("recall memory")||intent.equals("memory_recall")){answer=list(memory,"fact","No saved facts yet.","I remember:");}
+        else if(s.matches("^(correct|update) memory \\d+ to .+")){Matcher correction=Pattern.compile("^(?:correct|update) memory (\\d+) to (.+)$",Pattern.CASE_INSENSITIVE).matcher(raw.trim());answer=correction.matches()?correctMemoryAtIndex(Integer.parseInt(correction.group(1))-1,correction.group(2)):"Use: correct memory 2 to my name is Alex.";}
+        else if(s.startsWith("show saved memories")||s.equals("list memories")||s.equals("show memories")){answer=listMemories();}
+        else if(s.contains("what do you remember")||s.contains("recall memory")||intent.equals("memory_recall")){String topic=stripPrefix(s,"what do you remember about","what do you remember","recall memory about","recall memory","recall facts about").trim();answer=topic.isEmpty()||topic.equals("me")?listMemories():searchRelevantMemory(topic);}
         else if(intent.equals("journal_add")) answer="I may have misunderstood. To save a journal entry, say 'write in my journal: ...'. I won't save a diary entry based on a guess.";
         else if(s.contains("show my journal")||intent.equals("journal_list"))answer=list(journal,"text","Your journal is empty.","Recent journal entries:");
         else if(s.contains("my mood history")||s.contains("show mood log"))answer=list(moodLog,"emotion","No mood entries yet.","Recent mood check-ins:");
         else if(s.contains("backup")||intent.equals("backup"))answer="Open TOOLS and choose Export complete backup to save your notes, tasks, memory, journal, settings, command shortcuts, and voice clips to a ZIP file. Import backup replaces current local data after confirmation.";
         else if(s.equals("exit")||s.equals("goodbye")||intent.equals("goodbye"))answer="See you later. Your local data is saved.";
         else if(s.contains("what should i do")||s.contains("what can i do")||s.equals("tell me more")||s.equals("go on")) answer=contextualAdvice();
+        else if(dialogueIntent.equals("ordinary_question")) answer=recalledMemoryAnswer(raw, dialogueIntent);
         else answer=conversationFallback(s, raw, intent);
         // If a user-recorded slot exists, show the exact phrase that will be played so text and audio match.
         if(speakEnabled&&preferRecordedVoice){String slot=voiceSlotForReply(raw,s,intent,answer);if(slot!=null&&findVoiceClip(slot)!=null)answer=voicePromptFor(slot);}
-        rememberTurn(raw, answer);
+        rememberTurn(sensitiveMemoryRequest?"[Sensitive memory details omitted]":raw, answer);
         addMessage("Ammu",answer,true);
         if(speakEnabled) speakReply(raw, s, intent, answer);
         } catch(Exception ex) { String err="I hit a local error while handling that command. Your other saved data should remain intact."; addMessage("Ammu", err, true); if(speakEnabled && tts!=null) tts.speak(err,TextToSpeech.QUEUE_FLUSH,null,"ammu-error"); }
+    }
+
+    private void generatedFallback(String raw, String reason) {
+        String err = "Ammu could not generate a local response. " +
+            ("Native Qwen engine is not initialized".equals(reason)
+                ? "The bundled model is still initializing or failed to load. Please try again."
+                : "The native model stopped with a local inference error. You can try again.");
+        if ("Native Qwen engine is not initialized".equals(reason) && qwenLoadError != null && !qwenLoadError.trim().isEmpty()) {
+            err = "Ammu could not load the bundled Qwen model: " + qwenLoadError + ". Normal conversation is unavailable until this is fixed.";
+        } else if (reason != null && !reason.trim().isEmpty()) {
+            err = "Ammu's local Qwen inference failed: " + reason + ". No generated AI answer was produced.";
+        }
+        android.util.Log.e("AmmuConversation", "generation=failed reason=" + reason);
+        addMessage("Ammu", err, true);
+        rememberTurn(raw, err);
     }
 
     // ---------- V4 tools: speech input, safe command aliases, and portable data backup. ----------
@@ -270,20 +433,97 @@ public class MainActivity extends Activity {
     }
 
     void startSpeechInput(){
-        try{
-            Intent i=new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-            i.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
-            String selectedLanguage=prefs.getString("speech_language","default");i.putExtra(RecognizerIntent.EXTRA_LANGUAGE,"default".equals(selectedLanguage)?Locale.getDefault().toLanguageTag():selectedLanguage);
-            i.putExtra(RecognizerIntent.EXTRA_PROMPT,"Speak to Ammu");
-            i.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS,3);
-            // A hint only: the installed Android recognizer may ignore this or still require network access.
-            i.putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE,true);
-            startActivityForResult(i,REQ_SPEECH_INPUT);
-        }catch(Exception e){
-            new AlertDialog.Builder(this).setTitle("Voice input unavailable")
-                .setMessage("No compatible Android speech-recognition activity was found. You can still type commands. For offline speech, install an engine with your language downloaded for offline use.")
-                .setPositiveButton("OK",null).show();
+        if(Build.VERSION.SDK_INT<31){
+            showOfflineSpeechUnavailable("This Android version doesn't provide the on-device SpeechRecognizer API Ammu requires. You can continue chatting by typing.");
+            return;
         }
+        if(!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)){
+            showOfflineSpeechUnavailable("This device has no on-device speech-recognition service available. Ammu will not use online recognition. You can continue chatting by typing.");
+            return;
+        }
+        if(checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED){
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO},REQ_SPEECH_PERMISSION);
+            return;
+        }
+        String configuredLanguage=prefs.getString("speech_language","default");
+        String language="default".equals(configuredLanguage)?Locale.getDefault().toLanguageTag():configuredLanguage;
+        Intent request=new Intent();
+        request.putExtra("android.speech.extra.LANGUAGE_MODEL","free_form");
+        request.putExtra("android.speech.extra.LANGUAGE",language);
+        request.putExtra("android.speech.extra.MAX_RESULTS",3);
+        request.putExtra("android.speech.extra.PREFER_OFFLINE",true);
+        try{
+            stopSpeechRecognition();
+            speechRecognizer=SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
+            speechRecognizer.setRecognitionListener(new RecognitionListener(){
+                @Override public void onReadyForSpeech(Bundle params){speechListening=true;}
+                @Override public void onBeginningOfSpeech(){}
+                @Override public void onRmsChanged(float rmsdB){}
+                @Override public void onBufferReceived(byte[] buffer){}
+                @Override public void onEndOfSpeech(){}
+                @Override public void onError(int error){
+                    boolean wasListening=speechListening;speechListening=false;destroySpeechRecognizer();
+                    if(wasListening)addMessage("Ammu",offlineSpeechError(error)+" You can type your message instead.",false);
+                }
+                @Override public void onResults(Bundle results){
+                    speechListening=false;
+                    ArrayList<String> transcripts=results==null?null:results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                    destroySpeechRecognizer();
+                    if(transcripts!=null&&!transcripts.isEmpty()&&transcripts.get(0)!=null&&!transcripts.get(0).trim().isEmpty())runCommand(transcripts.get(0).trim());
+                    else addMessage("Ammu","The on-device recognizer didn't return a clear transcript. You can try again or type your message.",false);
+                }
+                @Override public void onPartialResults(Bundle partialResults){}
+                @Override public void onEvent(int eventType,Bundle params){}
+                @Override public void onSegmentResults(Bundle segmentResults){}
+                @Override public void onEndOfSegmentedSession(){}
+            });
+            if(Build.VERSION.SDK_INT>=33){
+                speechRecognizer.checkRecognitionSupport(request,getMainExecutor(),new RecognitionSupportCallback(){
+                    @Override public void onSupportResult(RecognitionSupport support){
+                        if(!ConversationLogic.supportsOnDeviceLanguage(support.getInstalledOnDeviceLanguages(),language)){
+                            destroySpeechRecognizer();
+                            showOfflineSpeechUnavailable("The on-device speech model for "+language+" isn't installed. Install that language model in your device's speech settings, or keep chatting by typing.");
+                            return;
+                        }
+                        startOnDeviceSpeechRecognition(request);
+                    }
+                    @Override public void onError(int error){
+                        destroySpeechRecognizer();
+                        showOfflineSpeechUnavailable("Ammu couldn't verify an installed on-device speech model for "+language+" (error "+error+"). No online recognizer will be used. You can continue chatting by typing.");
+                    }
+                });
+            }else startOnDeviceSpeechRecognition(request);
+        }catch(RuntimeException e){
+            destroySpeechRecognizer();
+            showOfflineSpeechUnavailable("Ammu couldn't start the on-device speech recognizer ("+e.getClass().getSimpleName()+"). No online fallback will be used. You can continue chatting by typing.");
+        }
+    }
+
+    void startOnDeviceSpeechRecognition(Intent request){
+        if(speechRecognizer==null)return;
+        try{speechListening=true;speechRecognizer.startListening(request);}
+        catch(RuntimeException e){speechListening=false;destroySpeechRecognizer();showOfflineSpeechUnavailable("The on-device recognizer couldn't start ("+e.getClass().getSimpleName()+"). No online fallback will be used. You can continue chatting by typing.");}
+    }
+
+    void showOfflineSpeechUnavailable(String message){
+        new AlertDialog.Builder(this).setTitle("Offline voice input unavailable").setMessage(message).setPositiveButton("OK",null).show();
+    }
+
+    String offlineSpeechError(int error){
+        if(error==SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED||error==SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE)
+            return "The selected offline language model is unavailable on this device.";
+        if(error==SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS)
+            return "Microphone permission is needed for on-device speech input.";
+        return "On-device speech recognition couldn't complete (error "+error+"). No audio was sent to an online recognizer.";
+    }
+
+    void destroySpeechRecognizer(){
+        if(speechRecognizer!=null){speechRecognizer.destroy();speechRecognizer=null;}
+    }
+
+    void stopSpeechRecognition(){
+        speechListening=false;
+        if(speechRecognizer!=null){speechRecognizer.cancel();speechRecognizer.destroy();speechRecognizer=null;}
     }
 
     void showSpeechLanguageDialog(){
@@ -564,7 +804,7 @@ public class MainActivity extends Activity {
     void confirmForgetMemoryAtIndex(int index){
         if(index<0||index>=memory.length()){addMessage("Ammu","That memory item no longer exists.",false);return;}
         JSONObject item=memory.optJSONObject(index);String preview=item==null?"(empty fact)":item.optString("fact","(empty fact)");if(preview.length()>240)preview=preview.substring(0,237)+"…";
-        new AlertDialog.Builder(this).setTitle("Forget this saved fact?").setMessage("Memory item "+(index+1)+":\n\n“"+preview+"”\n\nRemove this fact from Ammu's local memory?").setNegativeButton("Keep fact",(d,w)->addMessage("Ammu","Canceled. The fact remains saved.",false)).setPositiveButton("Forget fact",(d,w)->{if(index>=0&&index<memory.length()){memory.remove(index);save("memory",memory);addMessage("Ammu","Removed memory item "+(index+1)+" after your confirmation.",false);}else addMessage("Ammu","Memory changed before confirmation, so I did not remove anything.",false);}).show();
+        new AlertDialog.Builder(this).setTitle("Forget this saved fact?").setMessage("Memory item "+(index+1)+":\n\n“"+preview+"”\n\nRemove this fact from Ammu's local memory?").setNegativeButton("Keep fact",(d,w)->addMessage("Ammu","Canceled. The fact remains saved.",false)).setPositiveButton("Forget fact",(d,w)->{if(index>=0&&index<memory.length()){memory.remove(index);save("memory",memory);rebuildLocalMemoryDatabase();addMessage("Ammu","Removed memory item "+(index+1)+" after your confirmation.",false);}else addMessage("Ammu","Memory changed before confirmation, so I did not remove anything.",false);}).show();
     }
     void confirmCompleteTask(int id){
         int index=findTaskIndexById(id);if(index<0){addMessage("Ammu","Task not found.",false);return;}JSONObject task=tasks.optJSONObject(index);String label=task==null?"(unnamed task)":task.optString("text","(unnamed task)");
@@ -601,8 +841,8 @@ public class MainActivity extends Activity {
             "Ammu stores notes, tasks, saved facts, journal entries, mood history, conversation history, command shortcuts, training examples, settings, and recorded voice clips in app-private storage on this device. Ammu does not automatically upload these records.\n\n"+
             "OFFLINE OPERATION\n"+
             "Ammu's command logic and custom neural intent model run locally. The app manifest has no INTERNET permission and Ammu does not call a cloud AI endpoint.\n\n"+
-            "VOICE INPUT LIMITATION\n"+
-            "Voice input opens the Android recognizer selected on your device. The offline preference is only a request; some recognizers may process audio online. For a guaranteed local interaction, type your message or use a recognizer with the needed language installed for offline use. Speech output also depends on your installed Android text-to-speech engine and voice.\n\n"+
+            "VOICE INPUT\n"+
+            "Ammu uses Android's on-device SpeechRecognizer only, after checking that an on-device recognizer is available. On Android 13 and later, Ammu also checks whether the selected language model is installed. If the device or language model is unavailable, Ammu explains why and keeps typed chat available. Ammu never launches Google's speech-recognition activity or falls back to online recognition. Ammu has no INTERNET permission. Speech output may depend on your installed Android text-to-speech engine and voice.\n\n"+
             "BACKUPS AND VOICE CLIPS\n"+
             "Exported backup files may contain private personal information and voice recordings. Save them in a location you trust, do not share them publicly, and keep a separate copy of your release signing key. Uninstalling Ammu removes app-private data, so export a backup before switching signing keys or uninstalling.";
         new AlertDialog.Builder(this).setTitle("Privacy & offline operation").setMessage(msg)
@@ -613,7 +853,13 @@ public class MainActivity extends Activity {
 
     void showBrainDiagnostics(){
         int hidden=bias1==null?0:bias1.length;String model=brainReady?"Loaded and validated":"Unavailable";
-        String msg="Ammu 1.0 local diagnostics\nModel: "+model+(brainReady?"":"\nModel issue: "+brainLoadIssue)+"\nIntent categories: "+brainLabels.length+"\nText features: "+vocabIndex.size()+"\nHidden units: "+hidden+"\nConfidence threshold: "+(brain==null?"n/a":brain.optDouble("threshold",0.48))+"\nCustom shortcuts: "+customAliases.length()+"\nLabeled learning examples: "+(brainExamples==null?0:brainExamples.length())+" / 500\nData read warnings: "+(dataLoadWarnings.isEmpty()?"none":dataLoadWarnings)+"\n\nThis is a small custom intent classifier, not a general-purpose language model. Corrections are reviewed and stored locally; they do not alter live weights. Voice input uses Android's selected recognition service; the offline preference is not a guarantee.";
+        File qwenModel = new File(getFilesDir(), "Qwen3-0.6B-Q8_0.gguf");
+        String modelFile = qwenModel.isFile() ? "Found (" + qwenModel.length() + " bytes)" : "Not found";
+        String nativeStatus = qwenNativeLibraryLoaded ? "Loaded" : "Not loaded";
+        String initStatus = qwenReady ? "Success" : (qwenLoadError.isEmpty() ? "Pending" : "Failed: " + qwenLoadError);
+        String inferenceStatus = qwenInferenceReached ? "Reached native inference" : "Not reached";
+        String failureStatus = qwenInferenceFailure.isEmpty() ? "None" : qwenInferenceFailure;
+        String msg="Ammu 1.4 local diagnostics\nIntent model: "+model+(brainReady?"":"\nModel issue: "+brainLoadIssue)+"\nIntent categories: "+brainLabels.length+"\nText features: "+vocabIndex.size()+"\nHidden units: "+hidden+"\nConfidence threshold: "+(brain==null?"n/a":brain.optDouble("threshold",0.48))+"\nCustom shortcuts: "+customAliases.length()+"\nLabeled learning examples: "+(brainExamples==null?0:brainExamples.length())+" / 500\nData read warnings: "+(dataLoadWarnings.isEmpty()?"none":dataLoadWarnings)+"\n\nQwen model file: "+modelFile+"\nNative library: "+nativeStatus+"\nModel initialization: "+initStatus+"\nNormal chat reached inference: "+inferenceStatus+"\nGenerated token count: "+qwenGeneratedTokenCount+"\nInference failure: "+failureStatus+"\n\nBundled Qwen handles general conversation. The custom intent classifier and deterministic tools handle commands separately. Retrieved local memories provide context but do not alter live model weights. Voice input uses only the Android on-device recognizer when available, and never falls back online.";
         new AlertDialog.Builder(this).setTitle("Brain diagnostics").setMessage(msg).setPositiveButton("OK",null).show();
     }
 
@@ -697,10 +943,10 @@ public class MainActivity extends Activity {
     }
 
     String handlePreferenceOrCorrection(String s, String raw){
-        if(s.matches(".*\\b(i prefer short replies|keep it short|be concise|short answers)\\b.*")){replyStyle="short";prefs.edit().putString("reply_style",replyStyle).apply();return "Got it. I'll aim for shorter replies. You can say 'use detailed replies' to change this.";}
-        if(s.matches(".*\\b(use detailed replies|be more detailed|explain in detail)\\b.*")){replyStyle="detailed";prefs.edit().putString("reply_style",replyStyle).apply();return "I'll aim to give more detailed explanations.";}
-        if(s.matches(".*\\b(be more gentle|be gentle|softer tone)\\b.*")){replyStyle="gentle";prefs.edit().putString("reply_style",replyStyle).apply();return "I'll use a gentler tone where it fits.";}
-        if(s.matches(".*\\b(be direct|be more direct|no sugarcoating)\\b.*")){replyStyle="direct";prefs.edit().putString("reply_style",replyStyle).apply();return "I'll be more direct while staying respectful.";}
+        if(s.matches(".*\\b(i prefer short replies|i prefer concise replies|keep it short|be concise|short answers)\\b.*")){replyStyle="short";prefs.edit().putString("reply_style",replyStyle).apply();String saved=saveMemoryFact(raw);return saved.startsWith("I couldn't")?saved:"Got it. I'll aim for shorter replies. I saved this as a local preference; this does not change Ammu's neural model.";}
+        if(s.matches(".*\\b(i prefer detailed replies|use detailed replies|be more detailed|explain in detail)\\b.*")){replyStyle="detailed";prefs.edit().putString("reply_style",replyStyle).apply();String saved=saveMemoryFact(raw);return saved.startsWith("I couldn't")?saved:"I'll aim to give more detailed explanations and saved this local preference; this does not change Ammu's neural model.";}
+        if(s.matches(".*\\b(be more gentle|be gentle|softer tone)\\b.*")){replyStyle="gentle";prefs.edit().putString("reply_style",replyStyle).apply();String saved=saveMemoryFact(raw);return saved.startsWith("I couldn't")?saved:"I'll use a gentler tone where it fits and saved this local preference; this does not change Ammu's neural model.";}
+        if(s.matches(".*\\b(be direct|be more direct|no sugarcoating)\\b.*")){replyStyle="direct";prefs.edit().putString("reply_style",replyStyle).apply();String saved=saveMemoryFact(raw);return saved.startsWith("I couldn't")?saved:"I'll be more direct while staying respectful and saved this local preference; this does not change Ammu's neural model.";}
         if(s.startsWith("you misunderstood me")||s.startsWith("that's not what i meant")||s.startsWith("that is not what i meant")||s.startsWith("correct that")){
             String correction=stripPrefix(raw,"you misunderstood me","that's not what i meant","that is not what i meant","correct that");
             if(correction.startsWith("because ")) correction=correction.substring(8).trim();
@@ -796,14 +1042,205 @@ public class MainActivity extends Activity {
         return tracked?"All tracked steps for '"+lastPlanGoal+"' are marked complete. Review the result, then create a new plan for the next goal.":"I couldn't find tracked steps. Say 'add plan to tasks' to save the plan.";
     }
 
+    String memoryFactFromCommand(String raw){
+        if(raw.matches("(?i)^remember\\s+(this\\s+)?(for today|today only|for now|temporarily|this week|until tomorrow)\\b.*"))
+            return stripPrefix(raw,"remember");
+        return stripPrefix(raw,"remember that","remember this for today","remember this until tomorrow","remember","save to memory","keep in mind that","store fact that","save this personal detail","एक निजी तथ्य सेव करो","ನೆನಪಿಟ್ಟುಕೋ","ಇದನ್ನು ನೆನಪಿಟ್ಟುಕೋ","ನನ್ನ ಇಷ್ಟ ನೆನಪಿಡು","याद रखना","इसे याद रखना","मेरी पसंद याद रखो");
+    }
+
     String saveMemoryFact(String fact){
-        String clean=fact==null?"":fact.trim().replaceAll("\\s+"," ");
+        String supplied=fact==null?"":fact.trim().replaceAll("\\s+"," ");
+        if(supplied.isEmpty())return "Tell me the fact after 'remember that'.";
+        String type=ConversationLogic.isUncertain(supplied)?"unverified_guess":ConversationLogic.memoryType(supplied);
+        long expiry=temporaryMemoryExpiry(supplied);
+        String clean=supplied.replaceFirst("(?i)^(this\\s+)?(for today|today only|for now|temporarily|this week|until tomorrow)\\s*[:,-]?\\s*","").trim();
         if(clean.isEmpty())return "Tell me the fact after 'remember that'.";
-        for(int i=0;i<memory.length();i++){JSONObject o=memory.optJSONObject(i);if(o!=null&&o.optString("fact").trim().equalsIgnoreCase(clean))return "That fact is already saved in Ammu's local memory.";}
-        if(memory.length()>=1000)return "Your local memory limit (1,000 facts) is reached. Export a backup, then delete facts you no longer need.";try{memory.put(new JSONObject().put("fact",clean).put("date",now()));save("memory",memory);return "Saved that fact in Ammu's local memory on this phone.";}catch(Exception e){return "I couldn't save that fact. Check the app's available storage and try again.";}
+        boolean sensitive=ConversationLogic.isSensitive(clean);
+        boolean uncertain=ConversationLogic.isUncertain(supplied);
+        if(sensitive||uncertain){
+            String title=sensitive?"Save sensitive memory?":"Confirm uncertain memory?";
+            String message=sensitive?"This may be sensitive personal information. Ammu has not saved it as a memory. Save it only if you want it stored on this phone.":"This statement sounds uncertain. Ammu won't store it as a verified fact unless you confirm that you want it saved as an unverified memory.";
+            new AlertDialog.Builder(this).setTitle(title)
+                .setMessage(message)
+                .setNegativeButton("Don't save",(d,w)->addMessage("Ammu","I did not save that information as a memory.",false))
+                .setPositiveButton("Save on this phone",(d,w)->{
+                    String result=persistMemoryFact(clean,type,expiry);
+                    addMessage("Ammu",result,false);
+                }).show();
+            return "I haven't saved that memory. Please confirm in the dialog if you want to store it on this phone.";
+        }
+        return persistMemoryFact(clean,type,expiry);
+    }
+
+    String persistMemoryFact(String fact,String type){
+        return persistMemoryFact(fact,type,temporaryMemoryExpiry(fact));
+    }
+
+    String persistMemoryFact(String fact,String type,long expiry){
+        migrateMemoryRecords();
+        String key=ConversationLogic.memoryKey(fact);
+        for(int i=0;i<memory.length();i++){
+            JSONObject item=memory.optJSONObject(i);
+            if(item==null)continue;
+            String savedType=item.optString("type","personal_fact");
+            String savedKey=item.optString("key",ConversationLogic.memoryKey(item.optString("fact","")));
+            if(type.equals(savedType)&&key.equals(savedKey)){
+                try{
+                    item.put("fact",fact).put("type",type).put("key",key).put("date",now()).put("source","unverified_guess".equals(type)?"user_confirmed_uncertain":"explicit_user").put("verified",!"unverified_guess".equals(type));
+                    if("temporary".equals(type))item.put("expires_at_ms",expiry);
+                    else item.remove("expires_at_ms");
+                    memory.put(i,item);save("memory",memory);
+                    return "Updated the matching "+memoryTypeLabel(type)+" in local memory. This does not change Ammu's neural model.";
+                }catch(JSONException e){android.util.Log.e("Ammu","Could not update local memory.",e);return "I couldn't update that memory. Your previous saved fact is unchanged.";}
+            }
+        }
+        if(memory.length()>=1000)return "Your local memory limit (1,000 facts) is reached. Export a backup, then delete facts you no longer need.";
+        try{
+            JSONObject item=new JSONObject().put("fact",fact).put("type",type).put("key",key).put("date",now()).put("source","unverified_guess".equals(type)?"user_confirmed_uncertain":"explicit_user").put("verified",!"unverified_guess".equals(type));
+            if("temporary".equals(type))item.put("expires_at_ms",expiry);
+            memory.put(item);save("memory",memory);
+            localMemoryDatabase.upsert(key,fact,type,"explicit_user",!"unverified_guess".equals(type),expiry,item.optString("date",now()));
+            return "Saved this "+memoryTypeLabel(type)+" in local memory on this phone. This does not change Ammu's neural model.";
+        }catch(JSONException e){android.util.Log.e("Ammu","Could not save local memory.",e);return "I couldn't save that fact. Check the app's available storage and try again.";}
+    }
+
+    long temporaryMemoryExpiry(String fact){
+        String lower=fact.toLowerCase(Locale.ROOT);
+        long days=lower.matches(".*\\b(today|today only|until tomorrow)\\b.*")?1L:7L;
+        return System.currentTimeMillis()+days*24L*60L*60L*1000L;
+    }
+
+    String memoryTypeLabel(String type){
+        if("preference".equals(type))return "preference";
+        if("temporary".equals(type))return "temporary context";
+        if("unverified_guess".equals(type))return "unverified guess";
+        return "personal fact";
+    }
+
+    String handleExplicitMemoryCorrection(String userText,String raw){
+        if(!ConversationLogic.isExplicitCorrection(userText))return null;
+        String corrected=raw.replaceFirst("(?i)^(actually|correction|correct(ion)?|you misunderstood me|that's not what i meant|that is not what i meant)[,:]?\\s*","").trim();
+        String result=saveMemoryFact(corrected);
+        if(result.startsWith("This may be sensitive"))return result;
+        return "Thanks for correcting that. "+result;
+    }
+
+    String correctMemoryAtIndex(int index,String replacement){
+        if(index<0||index>=memory.length())return "I couldn't find that memory item number.";
+        String clean=replacement.trim().replaceAll("\\s+"," ");
+        if(clean.isEmpty())return "Include the corrected fact, for example: correct memory 2 to my name is Alex.";
+        boolean sensitive=ConversationLogic.isSensitive(clean);
+        boolean uncertain=ConversationLogic.isUncertain(clean);
+        String type=uncertain?"unverified_guess":ConversationLogic.memoryType(clean);
+        String oldFact=memory.optJSONObject(index)==null?"":memory.optJSONObject(index).optString("fact","");
+        if(sensitive||uncertain){
+            new AlertDialog.Builder(this).setTitle(sensitive?"Update sensitive memory?":"Confirm uncertain correction?")
+                .setMessage(sensitive?"This correction contains sensitive information. Replace the selected memory only if you want it saved on this phone.":"This correction sounds uncertain. Save it as an unverified guess only if you confirm.")
+                .setNegativeButton("Keep current memory",null)
+                .setPositiveButton("Update memory",(d,w)->replaceMemoryAt(index,clean,type,oldFact))
+                .show();
+            return "I haven't changed that memory. Please confirm the sensitive replacement in the dialog.";
+        }
+        return replaceMemoryAt(index,clean,type,oldFact);
+    }
+
+    String replaceMemoryAt(int index,String fact,String type,String expectedFact){
+        if(index<0||index>=memory.length())return "Memory changed before the update, so I left it unchanged.";
+        if(!expectedFact.equals(memory.optJSONObject(index)==null?"":memory.optJSONObject(index).optString("fact","")))
+            return "Memory changed before the update, so I left it unchanged.";
+        try{
+            String key=ConversationLogic.memoryKey(fact);
+            JSONObject item=new JSONObject().put("fact",fact).put("type",type).put("key",key).put("date",now()).put("source","unverified_guess".equals(type)?"user_confirmed_uncertain":"explicit_correction").put("verified",!"unverified_guess".equals(type));
+            if("temporary".equals(type))item.put("expires_at_ms",temporaryMemoryExpiry(fact));
+            memory.put(index,item);save("memory",memory);
+            localMemoryDatabase.upsert(key,fact,type,"explicit_correction",!"unverified_guess".equals(type),"temporary".equals(type)?temporaryMemoryExpiry(fact):0,item.optString("date",now()));
+            return "Updated memory item "+(index+1)+" as a "+memoryTypeLabel(type)+". This is a local memory update, not a neural-model change.";
+        }catch(JSONException e){android.util.Log.e("Ammu","Could not correct local memory.",e);return "I couldn't correct that memory. Your previous fact is unchanged.";}
+    }
+
+    List<String> memoryFactsForPipeline(){
+        migrateMemoryRecords();
+        return localMemoryDatabase.facts();
+    }
+
+    String buildQwenPrompt(String currentMessage, List<String> memories){
+        StringBuilder prompt=new StringBuilder();
+        prompt.append("<|im_start|>system\n")
+            .append("You are Ammu, a private, offline, conversational AI assistant. Answer ordinary questions directly and explain concepts at a helpful level. ")
+            .append("Respond naturally and empathetically to feelings without claiming human feelings. Use previous turns for follow-up questions. ")
+            .append("Ask a clarifying question only when the request is ambiguous, and express uncertainty only when the answer is genuinely uncertain. ")
+            .append("Do not repeat a limitations disclaimer or generic fallback. Use facts in the saved-memory section when relevant, but never claim that memories trained the model.<|im_end|>\n");
+
+        if(memories != null && !memories.isEmpty()){
+            prompt.append("<|im_start|>system\nRelevant saved local memories:\n");
+            int count=0;
+            for(String memory : memories){
+                if(memory==null||memory.trim().isEmpty())continue;
+                prompt.append("- ").append(memory.trim().length()>300 ? memory.trim().substring(0,300) : memory.trim()).append('\n');
+                if(++count==8)break;
+            }
+            prompt.append("<|im_end|>\n");
+        }
+
+        if(conversationHistory!=null){
+            int start=Math.max(0,conversationHistory.length()-6);
+            for(int i=start;i<conversationHistory.length();i++){
+                JSONObject turn=conversationHistory.optJSONObject(i);
+                if(turn==null)continue;
+                String user=boundedQwenText(turn.optString("user",""),500);
+                String assistant=boundedQwenText(turn.optString("assistant",""),700);
+                if(!user.isEmpty()){
+                    prompt.append("<|im_start|>user\n").append(user).append("<|im_end|>\n");
+                }
+                if(!assistant.isEmpty()){
+                    prompt.append("<|im_start|>assistant\n").append(assistant).append("<|im_end|>\n");
+                }
+            }
+        }
+        prompt.append("<|im_start|>user\n").append(boundedQwenText(currentMessage,2000)).append("<|im_end|>\n");
+        prompt.append("<|im_start|>assistant\n<think>\n\n</think>\n\n");
+        return prompt.toString();
+    }
+
+    String boundedQwenText(String text, int limit){
+        String clean=text==null?"":text.trim();
+        return clean.length()<=limit?clean:clean.substring(0,limit);
+    }
+
+    String listMemories(){
+        migrateMemoryRecords();
+        if(memory.length()==0)return "No saved memories yet. Teach me explicitly with 'remember that ...'.";
+        StringBuilder out=new StringBuilder("Saved local memories (not neural-model training):\n");
+        for(int i=Math.max(0,memory.length()-10);i<memory.length();i++){
+            JSONObject item=memory.optJSONObject(i);if(item==null)continue;
+            String type=item.optString("type","personal_fact");
+            out.append(i+1).append(". [").append(memoryTypeLabel(type)).append("] ").append(item.optString("fact")).append("\n");
+        }
+        return out.toString().trim();
+    }
+
+    String latestConversationUser(){
+        if(conversationHistory==null||conversationHistory.length()==0)return "";
+        JSONObject last=conversationHistory.optJSONObject(conversationHistory.length()-1);
+        return last==null?"":last.optString("user","");
+    }
+
+    String latestConversationAssistant(){
+        if(conversationHistory==null||conversationHistory.length()==0)return "";
+        JSONObject last=conversationHistory.optJSONObject(conversationHistory.length()-1);
+        return last==null?"":last.optString("assistant","");
+    }
+
+    String recalledMemoryAnswer(String raw, String dialogueIntent){
+        String subject=ConversationLogic.personalMemoryQuestionSubject(raw);
+        if(subject.isEmpty())return ConversationLogic.questionClarification(raw.toLowerCase(Locale.ROOT));
+        String recalled=searchRelevantMemory(subject);
+        if(recalled.startsWith("I couldn't find"))return "I don't have a saved fact about that. If it is something you want me to remember, say 'remember that ...'.";
+        return recalled;
     }
 
     String searchRelevantMemory(String query){
+        migrateMemoryRecords();
         String q=query==null?"":query.toLowerCase(Locale.ROOT).trim();
         if(q.startsWith("for "))q=q.substring(4).trim();
         if(q.isEmpty())return list(memory,"fact","No saved facts yet.","I remember:");
@@ -814,7 +1251,7 @@ public class MainActivity extends Activity {
         for(int i=0;i<memory.length();i++){JSONObject item=memory.optJSONObject(i);if(item==null)continue;String fact=item.optString("fact","").toLowerCase(Locale.ROOT);HashSet<String> factTerms=new HashSet<>();Matcher fm=Pattern.compile("[\\p{L}\\p{M}\\p{N}]+",Pattern.UNICODE_CHARACTER_CLASS).matcher(fact);while(fm.find())factTerms.add(fm.group());int score=0;if(fact.equals(q))score+=20;else if(fact.contains(q))score+=8;for(String term:terms){if(factTerms.contains(term))score+=4;else if(term.length()>=5&&fact.contains(term))score+=1;}if(score>0){hits.add(item);scores.add(score);}}
         if(hits.isEmpty())return "I couldn't find a saved fact closely related to '"+query+"'. Try 'what do you remember' to review all saved facts.";
         ArrayList<Integer> order=new ArrayList<>();for(int i=0;i<hits.size();i++)order.add(i);order.sort((a,b)->{int c=Integer.compare(scores.get(b),scores.get(a));if(c!=0)return c;return hits.get(b).optString("date","").compareTo(hits.get(a).optString("date",""));});
-        StringBuilder out=new StringBuilder("Related local memories (best matches first):\n");int shown=0;for(int ix:order){JSONObject item=hits.get(ix);out.append("• ").append(item.optString("fact")).append(" (saved ").append(item.optString("date","date unknown")).append(")\n");if(++shown>=8)break;}return out.toString().trim();
+        StringBuilder out=new StringBuilder("Related local memories (best matches first):\n");int shown=0;for(int ix:order){JSONObject item=hits.get(ix);        out.append("• [").append(memoryTypeLabel(item.optString("type","personal_fact"))).append("] ").append(item.optString("fact")).append(" (saved ").append(item.optString("date","date unknown")).append(")\n");if(++shown>=8)break;}return out.toString().trim();
     }
 
     String summarizeRecentConversation(){
@@ -832,7 +1269,7 @@ public class MainActivity extends Activity {
     void confirmClearMemory(){
         new AlertDialog.Builder(this).setTitle("Forget all saved facts?")
             .setMessage("This permanently removes every saved memory fact from this phone. Notes, tasks, journal, and conversation history will remain.")
-            .setNegativeButton("Cancel",null).setPositiveButton("Forget all facts",(d,w)->{memory=new JSONArray();save("memory",memory);addMessage("Ammu","All saved facts were removed from local memory.",false);}).show();
+            .setNegativeButton("Cancel",null).setPositiveButton("Forget all facts",(d,w)->{memory=new JSONArray();save("memory",memory);localMemoryDatabase.deleteAll();addMessage("Ammu","All saved facts were removed from local memory.",false);}).show();
     }
 
     void showAddPlanToTasksDialog(){
@@ -849,7 +1286,10 @@ public class MainActivity extends Activity {
 
     String contextualAdvice(){if(lastEmotion.isEmpty())return "Tell me a little about what's happening and what outcome you want. I'll help you think through options without assuming I know the whole situation.";return followUpReply("what should i do");}
     void trimOldest(JSONArray array,int max){while(array!=null&&array.length()>max)array.remove(0);}
-    void rememberTurn(String user, String assistant){try{if(conversationHistory==null)conversationHistory=new JSONArray();conversationHistory.put(new JSONObject().put("user",user).put("assistant",assistant).put("date",now()));while(conversationHistory.length()>12)conversationHistory.remove(0);save("conversation",conversationHistory);}catch(Exception ignored){}}
+    void rememberTurn(String user, String assistant){
+        try{if(conversationHistory==null)conversationHistory=new JSONArray();conversationHistory.put(new JSONObject().put("user",user).put("assistant",assistant).put("date",now()));while(conversationHistory.length()>12)conversationHistory.remove(0);save("conversation",conversationHistory);}
+        catch(Exception e){android.util.Log.e("Ammu","Could not save local conversation history.",e);addDataLoadWarning("conversation history could not be saved");}
+    }
 
     // Lightweight, rule-based emotional cue detection. This is not a diagnosis or a claim to read minds.
     boolean isFeelingStatement(String s){
@@ -906,6 +1346,7 @@ public class MainActivity extends Activity {
         return null;
     }
     String conversationFallback(String s, String raw, String intent){
+        if(intent.equals("conversation"))return "I can tell this is a conversational message, but I don't want to guess what you mean. Are you asking about me, following up on something we discussed, or correcting a saved fact?";
         if(s.matches(".*\\b(why|how come)\\b.*") && !lastEmotion.isEmpty())
             return "I can't know the exact reason from one message. You mentioned: "+lastTopic+". We can explore possible causes without treating a guess as fact. What happened just before you started feeling this way?";
         if(s.matches(".*\\b(help me decide|should i|which one|what do you think)\\b.*"))
@@ -1059,13 +1500,6 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
         if(resultCode!=RESULT_OK||data==null)return;
-        if(requestCode==REQ_SPEECH_INPUT){
-            ArrayList<String> results=data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-            if(results!=null&&!results.isEmpty()&&results.get(0)!=null&&!results.get(0).trim().isEmpty()){
-                String spoken=results.get(0).trim();runCommand(spoken);
-            }else addMessage("Ammu","I didn't receive a clear transcript. You can try again or type your command.",false);
-            return;
-        }
         if(data.getData()==null)return;Uri uri=data.getData();
         if(requestCode==REQ_EXPORT_BACKUP){exportBackup(uri);return;}
         if(requestCode==REQ_EXPORT_BRAIN_EXAMPLES){exportBrainExamples(uri);return;}
@@ -1082,7 +1516,12 @@ public class MainActivity extends Activity {
         }
     }
     void deleteVoiceClipExcept(String key,String keepExt){String[] exts={"m4a","wav","mp3","ogg","aac","3gp"};for(String ext:exts)if(!ext.equals(keepExt))new File(voiceDirectory(),key+"."+ext).delete();}
-    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){super.onRequestPermissionsResult(requestCode,permissions,grantResults);if(requestCode==REQ_AUDIO_PERMISSION){if(grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED)startVoiceRecording();else updateVoiceStatus("Microphone permission is needed to record your own voice. You can still import a recording.");}}
+    @Override public void onRequestPermissionsResult(int requestCode,String[] permissions,int[] grantResults){
+        super.onRequestPermissionsResult(requestCode,permissions,grantResults);
+        boolean granted=grantResults.length>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED;
+        if(requestCode==REQ_AUDIO_PERMISSION){if(granted)startVoiceRecording();else updateVoiceStatus("Microphone permission is needed to record your own voice. You can still import a recording.");}
+        else if(requestCode==REQ_SPEECH_PERMISSION){if(granted)startSpeechInput();else showOfflineSpeechUnavailable("Microphone permission is required for on-device speech input. Typed chat remains available.");}
+    }
     String voiceSlotForReply(String raw,String normalized,String intent,String answer){
         // Never replace crisis/safety advice with a short prerecorded clip.
         if(safetyResponse(normalized)!=null)return null;
@@ -1137,7 +1576,28 @@ public class MainActivity extends Activity {
         }
     }
     String readAsset(String name)throws Exception{InputStream is=getAssets().open(name);ByteArrayOutputStream out=new ByteArrayOutputStream();byte[] buf=new byte[8192];int n;while((n=is.read(buf))>0)out.write(buf,0,n);is.close();return out.toString("UTF-8");}
-    void loadData(){notes=load("notes");tasks=load("tasks");memory=load("memory");journal=load("journal");moodLog=load("mood");conversationHistory=load("conversation");brainExamples=load("brain_examples");try{customAliases=new JSONObject(prefs.getString("command_aliases","{}"));}catch(Exception e){customAliases=new JSONObject();}}
+    void loadData(){notes=load("notes");tasks=load("tasks");memory=load("memory");migrateMemoryRecords();journal=load("journal");moodLog=load("mood");conversationHistory=load("conversation");brainExamples=load("brain_examples");try{customAliases=new JSONObject(prefs.getString("command_aliases","{}"));}catch(Exception e){customAliases=new JSONObject();}}
+    void rebuildLocalMemoryDatabase(){
+        if(localMemoryDatabase==null)return;
+        localMemoryDatabase.deleteAll();
+        for(int i=0;i<memory.length();i++){JSONObject item=memory.optJSONObject(i);if(item==null)continue;String fact=item.optString("fact","").trim();if(fact.isEmpty())continue;localMemoryDatabase.upsert(item.optString("key",ConversationLogic.memoryKey(fact)),fact,item.optString("type","personal_fact"),item.optString("source","explicit_user"),item.optBoolean("verified",true),item.optLong("expires_at_ms",0),item.optString("date",now()));}
+    }
+
+    void migrateMemoryRecords(){
+        boolean changed=false;long nowMs=System.currentTimeMillis();
+        for(int i=memory.length()-1;i>=0;i--){
+            JSONObject item=memory.optJSONObject(i);if(item==null)continue;
+            if("temporary".equals(item.optString("type"))&&item.optLong("expires_at_ms",Long.MAX_VALUE)<=nowMs){memory.remove(i);changed=true;continue;}
+            try{
+                if(!item.has("type")){item.put("type","personal_fact");changed=true;}
+                if(!item.has("key")){item.put("key",ConversationLogic.memoryKey(item.optString("fact","")));changed=true;}
+                if(!item.has("source")){item.put("source","explicit_user");changed=true;}
+                if(!item.has("verified")){item.put("verified",true);changed=true;}
+                memory.put(i,item);
+            }catch(JSONException e){android.util.Log.e("Ammu","Could not migrate a local memory record.",e);}
+        }
+        if(changed)save("memory",memory);
+    }
     JSONArray load(String key){
         String raw=prefs.getString(key,"[]");
         try{JSONArray array=new JSONArray(raw);if(array.length()>5000){addDataLoadWarning(key+" exceeds the safe item limit");return new JSONArray();}return array;}
@@ -1153,7 +1613,7 @@ public class MainActivity extends Activity {
     android.graphics.drawable.GradientDrawable round(int color,int radius){android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));return d;}
     int dp(int x){return (int)(x*getResources().getDisplayMetrics().density+0.5f);}
     @Override protected void onResume(){super.onResume();if(refreshTtsOnResume){refreshTtsOnResume=false;initializeTts();}}
-    @Override protected void onPause(){if(isRecording)stopVoiceRecording(true);stopVoicePlayer();if(tts!=null)tts.stop();super.onPause();}
-    @Override protected void onDestroy(){if(isRecording)stopVoiceRecording(true);stopVoicePlayer();if(tts!=null){tts.stop();tts.shutdown();}super.onDestroy();}
+    @Override protected void onPause(){stopSpeechRecognition();if(isRecording)stopVoiceRecording(true);stopVoicePlayer();if(tts!=null)tts.stop();super.onPause();}
+    @Override protected void onDestroy(){stopSpeechRecognition();if(isRecording)stopVoiceRecording(true);stopVoicePlayer();if(tts!=null){tts.stop();tts.shutdown();}super.onDestroy();}
     static class Calc{String s;int i=0;Calc(String x){s=x.replaceAll("[^0-9.+*/%^() -]","").replaceAll("\\s+","");}double parse(){double x=expr();if(i<s.length()||!Double.isFinite(x))throw new RuntimeException();return x;}double expr(){double x=term();while(i<s.length()&&(s.charAt(i)=='+'||s.charAt(i)=='-')){char c=s.charAt(i++);double y=term();x=c=='+'?x+y:x-y;}return x;}double term(){double x=unary();while(i<s.length()&&(s.charAt(i)=='*'||s.charAt(i)=='/'||s.charAt(i)=='%')){char c=s.charAt(i++);double y=unary();if((c=='/'||c=='%')&&y==0)throw new RuntimeException();x=c=='*'?x*y:(c=='/'?x/y:x%y);}return x;}double unary(){if(i<s.length()&&s.charAt(i)=='+'){i++;return unary();}if(i<s.length()&&s.charAt(i)=='-'){i++;return -unary();}return power();}double power(){double x=primary();if(i<s.length()&&s.charAt(i)=='^'){i++;double y=unary();x=Math.pow(x,y);}return x;}double primary(){if(i<s.length()&&s.charAt(i)=='('){i++;double x=expr();if(i>=s.length()||s.charAt(i++)!=')')throw new RuntimeException();return x;}int st=i;while(i<s.length()&&(Character.isDigit(s.charAt(i))||s.charAt(i)=='.'))i++;if(st==i)throw new RuntimeException();double value=Double.parseDouble(s.substring(st,i));if(!Double.isFinite(value))throw new RuntimeException();return value;}}
 }

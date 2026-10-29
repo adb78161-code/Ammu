@@ -1,4 +1,4 @@
-name: Build Ammu 1.0 Official Signed APK
+name: Build Ammu 1.1 Official Signed APK
 on:
   workflow_dispatch:
 permissions:
@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          lfs: true
       - name: Verify required signing secrets are configured
         env:
           AMMU_KEYSTORE_BASE64: ${{ secrets.AMMU_KEYSTORE_BASE64 }}
@@ -72,6 +74,14 @@ jobs:
           AMMU_KEY_ALIAS: ${{ secrets.AMMU_KEY_ALIAS }}
           AMMU_KEY_PASSWORD: ${{ secrets.AMMU_KEY_PASSWORD }}
         run: gradle --no-daemon clean assembleRelease
+      - name: Verify packaged native library and Qwen model
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          unzip -l "$APK" | grep -E '^.*assets/models/Qwen3-0.6B-Q8_0\.gguf$'
+          unzip -l "$APK" | grep -E '^.*lib/arm64-v8a/libammu_qwen\.so$'
+          unzip -p "$APK" assets/models/Qwen3-0.6B-Q8_0.gguf | sha256sum --check <(printf '9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031  -\n')
       - name: Verify APK signature
         shell: bash
         run: |
@@ -85,7 +95,7 @@ jobs:
       - name: Upload official signed APK and checksum
         uses: actions/upload-artifact@v4
         with:
-          name: ammu-1.0-official-signed-apk
+          name: ammu-1.1-official-signed-apk
           path: |
             app/build/outputs/apk/release/app-release.apk
             app-release.apk.sha256

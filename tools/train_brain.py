@@ -209,8 +209,10 @@ def main() -> None:
     if args.epochs < 1 or args.hidden < 4 or not 0.05 < args.threshold < 0.95 or args.lr <= 0 or args.weight_decay < 0:
         raise SystemExit("Use epochs >= 1, hidden >= 4, threshold between 0.05 and 0.95, lr > 0 and weight_decay >= 0")
     base = json.loads(BASE_MODEL_PATH.read_text(encoding="utf-8"))
-    labels = list(base["labels"])
-    if "unknown" not in labels:
+    intent_labels = list(json.loads(INTENTS_PATH.read_text(encoding="utf-8")))
+    labels = [label for label in base["labels"] if label != "unknown" and label in intent_labels]
+    labels.extend(label for label in intent_labels if label not in labels and label != "unknown")
+    if "unknown" in intent_labels or "unknown" in base["labels"]:
         labels.append("unknown")
     texts, tags = load_examples(labels)
     # The fixed independent benchmark must never become training data, even if a

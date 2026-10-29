@@ -521,6 +521,26 @@
     {
       "text": "delete one particular note, number 5",
       "label": "note_delete_one"
+    },
+    {
+      "text": "What's your name?",
+      "label": "conversation"
+    },
+    {
+      "text": "Are you okay?",
+      "label": "conversation"
+    },
+    {
+      "text": "What is it?",
+      "label": "conversation"
+    },
+    {
+      "text": "Who are you exactly?",
+      "label": "conversation"
+    },
+    {
+      "text": "Tell me more about that",
+      "label": "conversation"
     }
   ]
 }

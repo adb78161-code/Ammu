@@ -1,4 +1,4 @@
-name: Validate Ammu 1.0 (CI debug APK only)
+name: Validate Ammu 1.1 (CI debug APK only)
 on:
   workflow_dispatch:
   push:
@@ -12,6 +12,19 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+        with:
+          lfs: true
+      - name: Verify bundled Qwen model and native sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          MODEL="app/src/main/assets/models/Qwen3-0.6B-Q8_0.gguf"
+          test "$(stat -c %s "$MODEL")" -eq 639446688
+          echo "9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031  $MODEL" | sha256sum --check -
+          test -f app/src/main/cpp/CMakeLists.txt
+          test -f app/src/main/cpp/ammu_qwen_jni.cpp
+          test -f third_party/llama.cpp/CMakeLists.txt
+          test -f app/src/main/java/com/ammu/assistant/QwenNativeEngine.java
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
@@ -40,16 +53,25 @@ jobs:
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
         with:
-          name: ammu-1.0-ci-evaluation-reports-not-for-release
+          name: ammu-1.1-ci-evaluation-reports-not-for-release
           path: |
             evaluation/ci-independent-brain-report.json
             evaluation/ci-secondary-brain-report.json
           if-no-files-found: error
       - name: Build CI/debug APK (not the official signed release)
         run: gradle --no-daemon assembleDebug
+      - name: Verify packaged native library and Qwen model
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          unzip -l "$APK" | grep -E '^.*assets/models/Qwen3-0.6B-Q8_0\.gguf$'
+          unzip -l "$APK" | grep -E '^.*lib/arm64-v8a/libammu_qwen\.so$'
+          unzip -p "$APK" assets/models/Qwen3-0.6B-Q8_0.gguf | sha256sum --check <(printf '9465e63a22add5354d9bb4b99e90117043c7124007664907259bd16d043bb031  -\n')
+          echo "APK_SIZE_BYTES=$(stat -c %s "$APK")"
       - name: Upload CI/debug APK (not for official distribution)
         uses: actions/upload-artifact@v4
         with:
-          name: ammu-1.0-ci-debug-apk-not-for-release
+          name: ammu-1.1-ci-debug-apk-not-for-release
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error

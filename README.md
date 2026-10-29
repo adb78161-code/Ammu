@@ -1,6 +1,6 @@
-# Ammu 1.0 — Official version source
+# Ammu 1.1 — Conversational and offline source upgrade
 
-Ammu 1.0 is the official product version identity. This repository package prepares the official release path; **a signed official APK is not yet built** in this workspace because it requires the owner's persistent signing key and a successful GitHub Actions release build. This source has also **not been tested on a physical device** yet. Do not distribute a CI/debug APK as the official app.
+This checkout contains the Ammu 1.1 source upgrade (`versionCode 23`). This task does not create or publish an official release: **no signed APK is built here**, and the source has **not been tested on a physical device**. Do not distribute a CI/debug APK as an official app.
 
 ## App icon and branding
 
@@ -9,22 +9,25 @@ The launcher icon now uses the user-provided illustrated logo. Density-specific 
 
 ## Product principles
 
-- Custom neural intent classifier trained from scratch; no pretrained LLM is used as Ammu's brain.
+- Custom neural intent classifier and tokenizer trained from scratch; no pretrained LLM, cloud AI API, online model endpoint, or downloaded model is used.
+- Deterministic conversation rules distinguish greetings, identity/wellbeing questions, corrections, emotional statements, follow-ups, and ordinary questions. The classifier predicts intents; it does not generate replies or establish facts.
 - Local command handling, notes, tasks, memory, journal, mood log, aliases, voice clips, learning examples, and backups.
+- Explicitly taught memories are stored locally as stable facts, preferences, or expiring temporary context. Corrections can update matching facts; sensitive facts require confirmation. Memory retrieval does not update neural weights.
+- Inspect memories with `what do you remember about me` or `search memory for ...`; correct one with `correct memory 1 to ...`; delete one with `forget memory 1`. Clearing conversation history leaves saved memories intact.
 - No Android `INTERNET` permission and no cloud AI endpoints in Ammu itself.
 - Allow-listed Android app launching, guarded mutations, and confirmation before destructive or consequential changes.
 - English, Hindi and Kannada command normalization for supported intents.
 - Training corrections are stored locally and do not change live neural weights until a candidate is separately trained, evaluated and manually promoted.
 
-## Important privacy detail
+## Important privacy details
 
-Ammu's core does not request internet access. However, speech recognition is delegated to the Android recognizer installed/selected on your device. `EXTRA_PREFER_OFFLINE` is only a hint; the recognizer may use a network service. For guaranteed offline interaction, type your commands or use a recognizer with the required language pack available offline. Open **TOOLS → Privacy & offline details** or type `privacy and offline info` for the in-app explanation.
+Ammu's core does not request internet access. Voice input uses Android's on-device `SpeechRecognizer` only after checking on-device availability. On Android 13 and later, Ammu also checks for the selected installed language model. If the device or language is unsupported, the app explains the limitation and typed chat remains available. Ammu never launches Google's speech-recognition activity or falls back to online recognition. Open **TOOLS → Privacy & offline details** or type `privacy and offline info` for the in-app explanation.
 
 Ammu's app-private data is lost if the app is uninstalled. Export a complete backup and verify that the exported file can be found before uninstalling or changing app-signing keys. Backup files can contain private information and custom voice clips; keep them private.
 
 ## Build and verify the source
 
-From a checkout with Python 3, NumPy, Java 17 and Gradle 8.9 available:
+From a checkout with Python 3, NumPy, Java 17, an Android SDK, and Gradle available:
 
 ```bash
 python3 -m pip install -r requirements-train.txt
@@ -32,17 +35,20 @@ python3 -m unittest discover -s tests -v
 python3 tools/test_java_logic.py
 python3 tools/validate_brain.py
 python3 tools/validate_release_source.py
+python3 tools/evaluate_brain.py
+python3 tools/evaluate_brain.py --benchmark app/src/main/assets/brain-benchmark-v2.json
+gradle --no-daemon assembleDebug
 ```
 
-The `Validate Ammu 1.0 (CI debug APK only)` workflow runs those checks and can build a debug APK. Its artifact is explicitly marked **not for official distribution**.
+The `Validate Ammu 1.1 (CI debug APK only)` workflow runs those checks and can build a debug APK. Its artifact is explicitly marked **not for official distribution**.
 
 ## Build the signed official APK
 
 1. Read `RELEASE_SIGNING_GUIDE.md` before setting up signing.
 2. Create a signing keystore you control and store backups offline.
 3. Add the four signing values as **GitHub Actions repository secrets**. Never put the keystore, password, or encoded keystore text into the repository/source ZIP.
-4. In GitHub, open **Actions → Build Ammu 1.0 Official Signed APK → Run workflow**.
-5. The workflow runs validation, builds the release variant, verifies the APK signature with `apksigner`, and uploads `ammu-1.0-official-signed-apk` plus a SHA-256 checksum.
+4. In GitHub, open **Actions → Build Ammu 1.1 Official Signed APK → Run workflow**.
+5. The workflow runs validation, builds the release variant, verifies the APK signature with `apksigner`, and uploads `ammu-1.1-official-signed-apk` plus a SHA-256 checksum.
 6. If a secret is missing or signature verification fails, no official artifact should be distributed.
 
 The four required repository secrets are:
@@ -56,7 +62,7 @@ Keep the same signing key for every future official update. Losing it can preven
 
 ## Updating from an earlier testing APK
 
-The Android application ID stays `com.ammu.assistant`, and the official version is `1.0` with Android `versionCode 22`. **Do not assume a locally installed debug APK can be upgraded in place**: Android requires the signing certificate to match too. Before replacing any testing build, export Ammu's complete backup and check that the file exists. If Android reports a signature mismatch, uninstalling the old build may be necessary; restore your backup after installing the signed APK.
+The Android application ID stays `com.ammu.assistant`; this source is version `1.1` with Android `versionCode 23`. **Do not assume a locally installed debug APK can be upgraded in place**: Android requires the signing certificate to match too. Before replacing any testing build, export Ammu's complete backup and check that the file exists. If Android reports a signature mismatch, uninstalling the old build may be necessary; restore your backup after installing the signed APK.
 
 ## Voice cloning
 
