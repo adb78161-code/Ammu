@@ -10,3 +10,12 @@ local.properties
 *keystore*.txt
 *base64*.txt
 .env
+
+# Python and workspace caches
+__pycache__/
+*.py[cod]
+.vscode/
+
+# Native build intermediates and local model backups
+app/.cxx/
+evaluation/model-backups/brain.backup-*.json
